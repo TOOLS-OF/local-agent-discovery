@@ -4,6 +4,12 @@ This is the shared office coordination record. It is an operational aid, not
 proof that an agent has performed work. Verify active GitHub state and local
 process state before taking action.
 
+Current topology: one Meridian chat session and one active process. Card names,
+station names, and role labels are descriptive facets of that session, not
+independent Meridian agents. Do not claim a multi-part Meridian system until a
+separate component is actually launched and operated through its own CLI/wmux
+surface.
+
 Last reviewed: 2026-09-04
 
 | Responsibility | Agent / identity | Account or surface | Current boundary | Next evidence or handoff |
