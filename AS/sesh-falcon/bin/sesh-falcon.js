@@ -68,6 +68,8 @@ Usage:
   --title               Name the session tab and ListAgents entry (optional, but strongly
                         recommended for any agent that peers need to address by name).
                         Cannot be used with --action attach (running session owns its title).
+                        Empirically: maps to claude --name in v2.1.278+ (not --title, which
+                        does not exist on this version).
   --harness             Target harness (default: claude-code)
   --dry-run             Print the command that would run, don't execute it
   --json                Print machine-readable output
