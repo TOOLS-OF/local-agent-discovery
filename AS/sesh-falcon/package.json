@@ -1,0 +1,27 @@
+{
+  "name": "sesh-falcon",
+  "version": "1.0.0",
+  "description": "Launch a session with every required parameter (model, cwd, permission mode) enforced explicitly - no silent defaults across Claude Code and Codex.",
+  "bin": {
+    "sesh-falcon": "./bin/sesh-falcon.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "keywords": [
+    "claude-code",
+    "codex",
+    "cli",
+    "agent",
+    "sessions",
+    "swarm",
+    "launch"
+  ],
+  "license": "MIT",
+  "author": "DarienSirius"
+}
