@@ -16,11 +16,19 @@
 // error and exited silently. The caller didn't check. The agent was never
 // relaunched. --action makes the caller declare which world they are in.
 //
-// --system-prompt-file gives a "new" (or resume/fork) launch a durable identity
-// via --append-system-prompt, instead of relying on whichever CLAUDE.md the
-// launch directory happens to surface. See AS/sesh-name for the higher-level
-// "launch this named agent" tool built on top of this.
-const { execSync } = require('child_process');
+// --agent passes through claude's own --agent <name> flag (verified in real
+// `claude --help`, not assumed) - the preferred way to give a launch a durable
+// identity when a named .claude/agents/<name>.md already exists, since claude
+// resolves that file itself. --system-prompt-file is the fallback for a
+// system-prompt addition with no corresponding named agent. See AS/sesh-name
+// for the higher-level "launch this named agent" tool built on top of this.
+//
+// Executes via execFileSync(argv[0], argv.slice(1)) - NOT execSync(command) -
+// because command is a display string that isn't safe to hand to a shell for
+// every input (see the 2026-09-20 note in lib/session-launch.js for the real
+// bug this replaced: $(cat file) shell substitution silently doesn't work
+// under execSync's default cmd.exe on Windows).
+const { execFileSync } = require('child_process');
 const { createSessionLauncher } = require('../../../lib/session-launch.js');
 
 function parseArgs(argv) {
@@ -38,6 +46,7 @@ function parseArgs(argv) {
     else if (a === '--harness') args.harness = argv[++i];
     else if (a === '--action') args.action = argv[++i];
     else if (a === '--title') args.title = argv[++i];
+    else if (a === '--agent') args.agent = argv[++i];
     else if (a === '--system-prompt-file') args.systemPromptFile = argv[++i];
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--json') args.json = true;
@@ -52,8 +61,8 @@ function printHelp() {
 Usage:
   sesh-falcon [--session <id-or-path>] --cwd <folder> --model <model>
               (--skip-permissions | --no-skip-permissions)
-              [--action new|resume|attach|fork] [--title "<agent-name>"]
-              [--system-prompt-file <path>]
+              [--action new|resume|attach|fork] [--title "<display name>"]
+              [--agent <name> | --system-prompt-file <path>]
               [--harness claude-code|codex] [--dry-run] [--json]
 
   --session             Session id or full transcript path. Required for every action except
@@ -78,12 +87,16 @@ Usage:
   --title               Name the session tab and ListAgents entry (optional, but strongly
                         recommended for any agent that peers need to address by name).
                         Cannot be used with --action attach (running session owns its title).
-  --system-prompt-file  Path to a file whose contents are passed via --append-system-prompt —
-                        gives a "new" launch a durable identity (e.g. .claude/agents/<name>.md)
-                        instead of relying on whatever CLAUDE.md the cwd happens to surface.
-                        Also valid on resume/fork. Cannot be used with --action attach.
-                        For launching a named agent by its own agent-definition file, prefer
-                        AS/sesh-name, which derives this (and --model, --title) automatically.
+  --agent               Bare agent name matching .claude/agents/<name>.md (verified real flag,
+                        "claude --help" -> "--agent <agent>: Agent for the current session").
+                        Preferred over --system-prompt-file whenever a named agent definition
+                        already exists — claude resolves that file itself. Not combinable with
+                        --system-prompt-file. Cannot be used with --action attach.
+  --system-prompt-file  Path to a file whose contents are passed via --append-system-prompt, for
+                        a system-prompt addition with no corresponding named agent. Valid on
+                        new/resume/fork, not --action attach. Not combinable with --agent.
+                        For launching a named agent by name, prefer AS/sesh-name, which resolves
+                        --agent (and --model, --title) from .claude/agents/<name>.md automatically.
   --harness             Target harness (default: claude-code)
   --dry-run             Print the command that would run, don't execute it
   --json                Print machine-readable output
@@ -109,6 +122,7 @@ async function main() {
       model: args.model,
       skipPermissions: args.skipPermissions,
       title: args.title,
+      agent: args.agent,
       appendSystemPromptFile: args.systemPromptFile,
     });
   } catch (e) {
@@ -127,7 +141,7 @@ async function main() {
     if (args.dryRun) return;
   }
 
-  execSync(built.command, { cwd: built.cwd, stdio: 'inherit' });
+  execFileSync(built.argv[0], built.argv.slice(1), { cwd: built.cwd, stdio: 'inherit' });
 }
 
 main().catch(e => { console.error('sesh-falcon error:', e.message); process.exit(1); });

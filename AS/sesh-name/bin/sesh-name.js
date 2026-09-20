@@ -15,9 +15,21 @@
 // context forward. `.claude/agents/<name>.md` existing is necessary but not
 // sufficient: something has to actually load it every time, not just when
 // someone remembers to.
+//
+// Uses claude's own --agent <name> flag (real flag, verified via `claude
+// --help`: "Agent for the current session... `claude agents` lists them") to
+// point at the agent, rather than reading the file's content and injecting it
+// via --append-system-prompt. claude already resolves .claude/agents/<name>.md
+// itself — reimplementing that (the first version of this tool did) is both
+// unnecessary and, in this case, was silently broken: it built
+// `--append-system-prompt "$(cat "<path>")"` as a shell string and relied on
+// execSync's default shell to expand it, but Windows execSync defaults to
+// cmd.exe, which doesn't support $(...) substitution at all. Verified this
+// directly rather than assuming a fix would work — see the 2026-09-20 note
+// in lib/session-launch.js.
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { createSessionLauncher } = require('../../../lib/session-launch.js');
 
 function parseArgs(argv) {
@@ -58,9 +70,9 @@ Usage:
                         search, so you always know exactly which agent-definition
                         tree you're pulling from).
   --session, --action   If launching fresh (the common case), omit both — this tool
-                        defaults to a "new" launch with <agent-name>.md passed via
-                        --append-system-prompt. If resuming/attaching/forking an
-                        EXISTING session instead, give --session and you must also
+                        defaults to a "new" launch with claude's own --agent <name>
+                        flag pointed at <agent-name>. If resuming/attaching/forking
+                        an EXISTING session instead, give --session and you must also
                         give --action explicitly (no default — same reasoning as
                         sesh-falcon: guessing wrong here silently fails or forks).
   --cwd                 Working directory for the launched session. Defaults to
@@ -140,7 +152,7 @@ function main() {
       model,
       skipPermissions: args.skipPermissions,
       title: action === 'attach' ? undefined : title,
-      appendSystemPromptFile: action === 'attach' ? undefined : agent.file,
+      agent: action === 'attach' ? undefined : args.agentName,
     });
   } catch (e) {
     console.error('sesh-name error:', e.message);
@@ -156,7 +168,7 @@ function main() {
     if (args.dryRun) return;
   }
 
-  execSync(built.command, { cwd: built.cwd, stdio: 'inherit' });
+  execFileSync(built.argv[0], built.argv.slice(1), { cwd: built.cwd, stdio: 'inherit' });
 }
 
 main();
