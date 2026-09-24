@@ -350,9 +350,17 @@ function printRepairHuman(report, query) {
 }
 
 function run() {
+  const codex = new CodexDiscovery(codexDbArg);
+  if (mode === 'repair-report') {
+    const report = codex.repairReport(queryArg, normalize(path.resolve(process.cwd())), depthArg);
+    if (!report) throw new Error('No Codex state database found or repair report could not be read.');
+    if (jsonOut) console.log(JSON.stringify(report, null, 2));
+    else printRepairHuman(report, queryArg);
+    return;
+  }
+
   const claude = new ClaudeDiscovery();
   const vscode = new VSCodeDiscovery();
-  const codex = new CodexDiscovery(codexDbArg);
   let results;
   if (mode === 'by-cwd') {
     const target = normalize(path.resolve(queryArg));
@@ -365,13 +373,6 @@ function run() {
       ...codex.nativeSubagents(queryArg, normalize(path.resolve(process.cwd())), depthArg),
     ];
     if (results.length === 0) results = codex.legacySubagents(queryArg);
-  }
-  if (mode === 'repair-report') {
-    const report = codex.repairReport(queryArg, normalize(path.resolve(process.cwd())), depthArg);
-    if (!report) throw new Error('No Codex state database found or repair report could not be read.');
-    if (jsonOut) console.log(JSON.stringify(report, null, 2));
-    else printRepairHuman(report, queryArg);
-    return;
   }
   results.sort((a, b) => new Date(b.mtime || b.updatedAt || 0) - new Date(a.mtime || a.updatedAt || 0));
   if (jsonOut) console.log(JSON.stringify(results, null, 2));
