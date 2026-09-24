@@ -310,7 +310,9 @@ These workflows belong to the PFM infrastructure and must be followed identicall
 
 ### Runtime authority
 
-The local LeagueOS demo stack runs in the **`LeagueOS`** WSL2 distro's own Docker daemon (not KPFM — that distro was abandoned 2026-09-23). Windows Docker Desktop is a separate daemon and is not authoritative. Windows ports 8207-8210 are forwarded into LeagueOS via `C:\ProgramData\LeagueOS-LAN\maintain-lan.ps1` (Scheduled Task `LeagueOS-LAN-worker`, runs every 60s). Plugin and theme code are read-only bind mounts from **native WSL git checkouts** inside the LeagueOS distro: `/var/lib/leagueos/staging` (for staging containers) and `/var/lib/leagueos/candidate` (for candidate containers) — never `/mnt/c/` paths, which cause 9P filesystem crashes.
+The local LeagueOS demo stack runs in the **`LeagueOS`** WSL2 distro's own Docker daemon (not KPFM — that distro was abandoned 2026-09-23). Windows Docker Desktop is a separate daemon and is not authoritative. Windows ports 8207-8210 are forwarded into LeagueOS via `C:\ProgramData\LeagueOS-LAN\maintain-lan.ps1` (Scheduled Task `LeagueOS-LAN-worker`, runs every 60s). Plugin and theme code are read-only bind mounts from **native WSL git checkouts** inside the owning team distro: `/var/lib/leagueos/staging` (for staging containers) and `/var/lib/leagueos/candidate` (for candidate containers) — never `/mnt/c/` paths, which cause 9P filesystem crashes. The Red team uses `LeagueOS_Red`, its own Docker data root, bridge, networks, and ports 8307-8310; it must never inherit Blue's `/var/lib/docker`, `docker0`, networks, volumes, or Compose projects. Because WSL distros can share a kernel/network namespace, a distinct Docker data root alone is insufficient: Red's daemon must use a distinct bridge such as `docker0-red` and a non-overlapping address pool.
+
+Team identity is address-qualified throughout operations: `🟥` or `🟦` may prefix a card designation, and `_red` or `_blue` may suffix an agent name. Thus `🟥🔱3♣️` and `🟦🔱3♣️`, or `Nietzsche_red` and `Nietzsche_blue`, are distinct entities even when the base designation matches. See `LOCAL-CONTAINER-CONTRACT.md` for the shared Red/Blue bootstrap, isolation, and verification contract.
 
 The **four-container 2×2 grid** (as of 2026-09-23):
 
@@ -400,6 +402,28 @@ this script is deliberately a local, free substitute — see
 `.claude/agents/meridian.md`'s "Branch/deploy policy" section for the full
 incident history if useful, but the rule itself doesn't require reading
 that: always `pfm-merge.sh`, never raw `gh pr merge`, full stop.
+
+### A hotfix deployed to staging MUST also reach devline, and its downstream branches
+
+Real incident, 2026-09-24: an agent deployed six real hotfixes straight to
+real staging via the SOAP path, verified each live, and never merged any of
+them to `devline` — wrongly reading "nothing reaches devline without
+Victor's review of a local candidate build" as covering hotfixes too.
+`devline` drifted behind real staging for hours, and a second agent then
+started a fix from stale `devline` HEAD, which would have reverted all six
+fixes if merged as-is.
+
+Victor, direct: *"A hotfix deploy still needs to go to devline. Devline
+'MEANS' this is staging's code... it needs to be backported into the
+downstream chain as well, so it doesn't get lost on the next INTENTIONAL
+feature release deployment."* Full detail, including why this doesn't
+conflict with the local-candidate-review gate (they govern two different
+things: "what's live now" vs. "what's approved for the next release") and
+the correct-base-branch discipline for stacking multiple hotfixes before
+any reach devline: `PPL-STAGING-DEPLOY-RUNBOOK.md` sections 4a/4b (also
+covers the now-mandatory "every fix ships with a real regression-catching
+test" gate). Read those sections before deploying or dispatching any
+hotfix — this is not optional context.
 
 ### Freshness rule
 

@@ -94,11 +94,11 @@ Red uses a separate host-port block and team-qualified Compose project names:
 | candidate anon | `leagueos-red-candidate-anon` | 8309 | Red-owned anonymized candidate copy | `/var/lib/leagueos/candidate` |
 | candidate synth | `leagueos-red-candidate-synth` | 8310 | Red-owned synthetic integration fixtures | `/var/lib/leagueos/candidate` |
 
-The Red `leagueos-red` single-project setup observed during this contract
-review is legacy and non-conforming. It provides only one instance lane,
-uses `8307`, and must not be reported as a Red 2x2 grid. Until the four Red
-projects above exist and pass verification, Red has no valid shared review
-grid. Do not repair that gap by editing or reusing the Blue runtime.
+The Red `leagueos-red` single-project setup is legacy and non-conforming. It
+provides only one instance lane, uses `8307`, and must not be reported as a
+Red 2x2 grid. A conforming Red setup creates the four projects above from the
+same reviewed Compose source and verifies them independently. Do not repair a
+Red gap by editing, reusing, or attaching to the Blue runtime.
 
 ### Per-lane source mounts
 
@@ -283,15 +283,75 @@ same anonymized *data contents* after the approved sync, but they do not share
 live volumes; Red data remains separate. Synthetic lanes must be seeded with
 fixtures appropriate to the feature under test.
 
-## Current known gap
+## Cloned-distro failure and Red bootstrap
 
-The Blue `LeagueOS` distro has the canonical four-lane shape and port block.
-The Red `LeagueOS_Red` distro has been observed with an exited legacy
-`leagueos-red` two-service project instead of the required Red 2x2. This
-contract change documents the target and the fail-closed diagnosis, but does
-not provision, restart, or mutate either distro. Red remains not ready for
-shared four-lane validation until its owner supplies the four projects, source
-mounts, volumes, health policy, and forwarding verification listed above.
+Never treat an imported WSL distro as an isolated Docker host merely because it
+has a different distro name. A cloned `/var/lib/docker` can carry the Blue
+engine identity, container metadata, named volumes, and a persisted `docker0`
+network into Red. When the Red daemon then starts, systemd can retry it every
+few seconds with an error such as `networks have same bridge name`; the visible
+effect is a 30--60 second application or distro restart cycle. This is an
+engine/bootstrap failure, not a WordPress or score-entry symptom.
+
+Before starting any Red Compose project:
+
+1. Preserve the imported Docker root for forensics. Do not delete it and do
+   not run `down -v`, prune, or volume cleanup against it.
+2. Give Red a fresh Docker data root using the distro's Docker service
+   configuration, for example `/var/lib/docker-red`. Restart only the Red
+   Docker service after the change.
+3. WSL distros may share the host kernel/network namespace. Give Red a unique
+   bridge and address pool as well as a unique data root. The effective Red
+   daemon configuration in this environment is:
+
+   ```json
+   {
+     "data-root": "/var/lib/docker-red",
+     "bridge": "docker0-red",
+     "default-address-pools": [{"base": "172.31.0.0/16", "size": 24}]
+   }
+   ```
+
+   If this Docker build requires a non-default bridge to exist first, create
+   `docker0-red` in the Red distro before starting its Docker service. Never
+   make both daemons own `docker0`.
+4. Verify the Red engine identity and root differ from Blue:
+
+   ```powershell
+   wsl.exe -d LeagueOS -- docker info --format 'id={{.ID}} root={{.DockerRootDir}}'
+   wsl.exe -d LeagueOS_Red -- docker info --format 'id={{.ID}} root={{.DockerRootDir}}'
+   ```
+
+   A matching engine ID or data root is a blocking failure. Stop Red setup and
+   repair isolation before creating containers.
+5. Place the reviewed Compose file in a Red-native operations path such as
+   `/var/lib/leagueos/ops/docker-compose.yml`. The file may be copied from
+   the exact reviewed source, but its resolved application mounts must remain
+   `/var/lib/leagueos/staging` or `/var/lib/leagueos/candidate` inside Red.
+6. Render the configuration with all required variables before `up`. The
+   four projects use distinct project names, ports, networks, and volumes:
+
+   ```powershell
+   wsl.exe -d LeagueOS_Red -- docker compose -p leagueos-red-staging-anon -f /var/lib/leagueos/ops/docker-compose.yml config --quiet
+   wsl.exe -d LeagueOS_Red -- docker compose -p leagueos-red-staging-synth -f /var/lib/leagueos/ops/docker-compose.yml config --quiet
+   wsl.exe -d LeagueOS_Red -- docker compose -p leagueos-red-candidate-anon -f /var/lib/leagueos/ops/docker-compose.yml config --quiet
+   wsl.exe -d LeagueOS_Red -- docker compose -p leagueos-red-candidate-synth -f /var/lib/leagueos/ops/docker-compose.yml config --quiet
+   ```
+
+7. Start only the requested Red project with its explicit repo root, public
+   URL, instance port, and `LEAGUEOS_BIND_ADDRESS`; then wait for the matching
+   database healthcheck before testing WordPress. Never use the Blue ports or
+   Blue volume names as a shortcut.
+8. If the daemon fails, capture the owning distro's Docker journal and event
+   stream before restarting it again:
+
+   ```powershell
+   wsl.exe -d LeagueOS_Red -- journalctl -u docker --since '15 minutes ago' --no-pager
+   wsl.exe -d LeagueOS_Red -- docker events --since 15m --filter type=container --filter event=die
+   ```
+
+   Use the first `dockerd` error as the diagnosis. Repeated systemd retries do
+   not prove that application containers are restarting.
 
 ## Approved Blue anonymized refresh
 
