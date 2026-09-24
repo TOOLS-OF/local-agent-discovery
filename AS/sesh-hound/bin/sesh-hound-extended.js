@@ -1,258 +1,349 @@
 #!/usr/bin/env node
-const fs = require('fs'), path = require('path'), os = require('os'), {execSync} = require('child_process');
+/**
+ * sesh-hound — progressive address-book discovery for local agent sessions.
+ *
+ * Codex discovery uses the indexed native state database when available and
+ * falls back to rollout-file scanning only when that index is unavailable.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { CodexNativeState, normalize, pathMatches, fileMTime } = require('../../../lib/codex-native-state.cjs');
+
 const HOME = os.homedir();
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const helpFlag = args.includes('--help') || args.includes('-h');
+const dbIndex = args.indexOf('--codex-db');
+const codexDbArg = dbIndex >= 0 ? args[dbIndex + 1] : null;
+const depthIndex = args.indexOf('--depth');
+const depthArg = depthIndex >= 0 ? Number(args[depthIndex + 1]) : 1;
+
+function valueAfter(flag) {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : null;
+}
 
 if (helpFlag) {
-  console.log(`sesh-hound extended — address book for agent sensing
+  console.log(`sesh-hound — address book for local agent sensing
+
 Usage:
-  sesh-hound [cwd]                    Find sessions spawned from folder
-  sesh-hound --by-title <name>       Find session by agent title
-  sesh-hound --subagents <sessionId> Sense subagents in session
-  sesh-hound --json [...]            Output as JSON (works with any mode)
-  sesh-hound --help                  Show this help`);
+  sesh-hound [cwd] [--json]
+  sesh-hound --by-title <name> [--json]
+  sesh-hound --subagents <id-or-name> [--depth N] [--json]
+  sesh-hound --codex-native-subagents [id-or-name] [--depth N] [--json]
+  sesh-hound --codex-db <path> ...
+
+Discovery depth:
+  folder       Fast cross-harness session index by working directory.
+  title        Resolve a human/agent title, name, or nickname.
+  subagents    Resolve a parent by UUID or name, then list native children.
+  native       Codex-only alias for subagents; useful when proving the
+               current Codex parent/child graph.
+
+Codex uses the newest ~/.codex/state_*.sqlite by default. The indexed database
+avoids recursively opening every rollout file; --codex-db overrides it.
+
+Related tools:
+  sesh-falcon   launch or resume a named agent
+  sesh-name     resolve an agent's own instruction identity
+  sesh-nautilus reconstruct dropped compaction boundaries
+  sesh-stork    deliver a session artifact to another harness`);
   process.exit(0);
 }
 
-let mode = 'by-cwd';
-let queryArg = null;
+function findPositional() {
+  const skipped = new Set(['--json', '--help', '-h', '--by-title', '--subagents',
+    '--codex-native-subagents', '--codex-db', '--depth']);
+  const values = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (skipped.has(arg)) {
+      if (['--by-title', '--subagents', '--codex-native-subagents', '--codex-db', '--depth'].includes(arg)) index += 1;
+      continue;
+    }
+    if (!arg.startsWith('-')) values.push(arg);
+  }
+  return values[0] || process.cwd();
+}
 
+let mode = 'by-cwd';
+let queryArg = findPositional();
 if (args.includes('--by-title')) {
   mode = 'by-title';
-  queryArg = args[args.indexOf('--by-title') + 1];
+  queryArg = valueAfter('--by-title');
 } else if (args.includes('--subagents')) {
   mode = 'subagents';
-  queryArg = args[args.indexOf('--subagents') + 1];
-} else {
-  queryArg = args.find(a => !a.startsWith('-')) || process.cwd();
+  queryArg = valueAfter('--subagents');
+} else if (args.includes('--codex-native-subagents')) {
+  mode = 'native-subagents';
+  queryArg = valueAfter('--codex-native-subagents');
 }
 
-function normalize(p) { return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); }
-function pathMatches(cwd, target) { if (!cwd) return false; const n = normalize(cwd); return n === target || n.startsWith(target + '/') || target.startsWith(n + '/'); }
-function fileMTime(p) { try { return fs.statSync(p).mtime; } catch { return null; } }
-
-async function discoverByPath() {
-  const results = [];
-  const normalized = normalize(path.resolve(queryArg));
-
-  // Claude Code
-  try {
-    const projectsDir = path.join(HOME, '.claude', 'projects');
-    if (fs.existsSync(projectsDir)) {
-      for (const dir of fs.readdirSync(projectsDir)) {
-        const dirPath = path.join(projectsDir, dir);
-        if (!fs.statSync(dirPath).isDirectory()) continue;
-        for (const f of fs.readdirSync(dirPath)) {
-          if (!f.endsWith('.jsonl')) continue;
-          const fullPath = path.join(dirPath, f);
-          try {
-            const buf = fs.readFileSync(fullPath, 'utf8').slice(0, 8000);
-            const cwdM = buf.match(/"cwd":"([^"]*)"/);
-            const slugM = buf.match(/"slug":"([^"]*)"/);
-            const cwd = cwdM ? cwdM[1].replace(/\\\\/g, '\\') : null;
-            const title = slugM ? slugM[1] : null;
-            if (cwd && pathMatches(cwd, normalized)) {
-              results.push({ sessionId: f.replace('.jsonl', ''), title, cwd, file: fullPath, tool: 'claude-code', mtime: fileMTime(fullPath) });
-            }
-          } catch (e) { }
-        }
-      }
-    }
-  } catch (e) { }
-
-  // Codex
-  try {
-    const sessionsDir = path.join(HOME, '.codex', 'sessions');
-    if (fs.existsSync(sessionsDir)) {
-      const walk = (dir) => {
-        try {
-          for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-            const full = path.join(dir, e.name);
-            if (e.isDirectory()) walk(full);
-            else if (e.name.endsWith('.jsonl')) {
-              try {
-                const buf = fs.readFileSync(full, 'utf8').slice(0, 4096);
-                const cwdM = buf.match(/"cwd":"([^"]*)"/);
-                const cwd = cwdM ? cwdM[1].replace(/\\\\/g, '\\') : null;
-                if (cwd && pathMatches(cwd, normalized)) {
-                  const sid = e.name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] || e.name.replace('.jsonl', '');
-                  results.push({ sessionId: sid, cwd, file: full, tool: 'codex', mtime: fileMTime(full) });
-                }
-              } catch (e) { }
-            }
-          }
-        } catch (e) { }
-      };
-      walk(sessionsDir);
-    }
-  } catch (e) { }
-
-  return results;
-}
-
-async function discoverByTitle() {
-  const results = [];
-  const titleLower = queryArg.toLowerCase();
-
-  // Claude Code
-  try {
-    const projectsDir = path.join(HOME, '.claude', 'projects');
-    if (fs.existsSync(projectsDir)) {
-      for (const dir of fs.readdirSync(projectsDir)) {
-        const dirPath = path.join(projectsDir, dir);
-        if (!fs.statSync(dirPath).isDirectory()) continue;
-        for (const f of fs.readdirSync(dirPath)) {
-          if (!f.endsWith('.jsonl')) continue;
-          const fullPath = path.join(dirPath, f);
-          try {
-            const buf = fs.readFileSync(fullPath, 'utf8').slice(0, 8000);
-            const slugM = buf.match(/"slug":"([^"]*)"/);
-            const title = slugM ? slugM[1] : null;
-            if (title && title.toLowerCase().includes(titleLower)) {
-              results.push({ sessionId: f.replace('.jsonl', ''), title, file: fullPath, tool: 'claude-code', mtime: fileMTime(fullPath) });
-            }
-          } catch (e) { }
-        }
-      }
-    }
-  } catch (e) { }
-
-  // Codex (via SQLite)
-  try {
-    const dbPath = path.join(HOME, '.codex', 'sqlite', 'codex-dev.db');
-    if (fs.existsSync(dbPath)) {
-      const q = `SELECT thread_id, display_title FROM local_thread_catalog WHERE display_title LIKE '%${queryArg.replace(/'/g, "''")}%';`;
-      const res = execSync(`sqlite3 "${dbPath}" "${q}"`, {encoding: 'utf8', maxBuffer: 10 * 1024 * 1024});
-      for (const line of res.split('\n').filter(l => l.trim())) {
-        const [sid, ...titleParts] = line.split('|');
-        const title = titleParts.join('|');
-        if (sid && title) {
-          // Try to find the actual file
-          let file = null;
-          const sessionsDir = path.join(HOME, '.codex', 'sessions');
-          if (fs.existsSync(sessionsDir)) {
-            const walk = (dir) => {
-              try {
-                for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-                  const full = path.join(dir, e.name);
-                  if (e.isDirectory()) {
-                    const found = walk(full);
-                    if (found) return found;
-                  } else if (e.name.includes(sid) && e.name.endsWith('.jsonl')) {
-                    return full;
-                  }
-                }
-              } catch (e) { }
-              return null;
-            };
-            file = walk(sessionsDir);
-          }
-          results.push({ sessionId: sid, title, tool: 'codex', file, mtime: file ? fileMTime(file) : null });
-        }
-      }
-    }
-  } catch (e) { }
-
-  return results;
-}
-
-async function discoverSubagents() {
-  const results = [];
-  let session = null;
-
-  // Search Claude Code
-  try {
-    const projectsDir = path.join(HOME, '.claude', 'projects');
-    if (fs.existsSync(projectsDir)) {
-      for (const dir of fs.readdirSync(projectsDir)) {
-        const dirPath = path.join(projectsDir, dir);
-        if (!fs.statSync(dirPath).isDirectory()) continue;
-        const filePath = path.join(dirPath, queryArg + '.jsonl');
-        if (fs.existsSync(filePath)) {
-          session = { sessionId: queryArg, file: filePath, tool: 'claude-code' };
-          break;
-        }
-      }
-    }
-  } catch (e) { }
-
-  // Search Codex
-  if (!session) {
+class HarnessDiscovery {
+  extractCwd(filePath) {
     try {
-      const sessionsDir = path.join(HOME, '.codex', 'sessions');
-      if (fs.existsSync(sessionsDir)) {
-        const walk = (dir) => {
-          try {
-            for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-              const full = path.join(dir, e.name);
-              if (e.isDirectory()) {
-                const found = walk(full);
-                if (found) return found;
-              } else if (e.name.includes(queryArg) && e.name.endsWith('.jsonl')) {
-                return full;
-              }
-            }
-          } catch (e) { }
-          return null;
-        };
-        const file = walk(sessionsDir);
-        if (file) session = { sessionId: queryArg, file, tool: 'codex' };
-      }
-    } catch (e) { }
+      const text = fs.readFileSync(filePath).slice(0, 8000).toString('utf8');
+      const match = text.match(/"cwd":"([^"]*)"/);
+      return match ? match[1].replace(/\\\\/g, '\\') : null;
+    } catch { return null; }
   }
 
-  if (!session) {
-    if (!jsonOut) console.error(`Session ${queryArg} not found.`);
-    process.exit(1);
+  extractTitle(filePath) {
+    try {
+      const text = fs.readFileSync(filePath, 'utf8').slice(0, 8000);
+      const match = text.match(/"(?:slug|display_title|title)":"([^"]*)"/);
+      return match ? match[1] : null;
+    } catch { return null; }
   }
-
-  // Extract subagents from file
-  try {
-    const content = fs.readFileSync(session.file, 'utf8');
-    const match = content.match(/"subagents"\s*:\s*"([^"]+)"/);
-    const subagents = [];
-    if (match) {
-      const subagentText = match[1].replace(/\\n/g, '\n');
-      for (const line of subagentText.split('\n')) {
-        const m = line.match(/^-\s+[a-f0-9\-]+:\s+(.+)$/);
-        if (m) subagents.push({name: m[1].trim()});
-      }
-    }
-    results.push({...session, subagents});
-  } catch (e) { }
-
-  return results;
 }
 
-async function run() {
-  let results = [];
+class ClaudeDiscovery extends HarnessDiscovery {
+  files() {
+    const root = path.join(HOME, '.claude', 'projects');
+    if (!fs.existsSync(root)) return [];
+    const files = [];
+    for (const directory of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!directory.isDirectory()) continue;
+      const dirPath = path.join(root, directory.name);
+      for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(path.join(dirPath, entry.name));
+      }
+    }
+    return files;
+  }
 
-  if (mode === 'by-cwd') results = await discoverByPath();
-  else if (mode === 'by-title') results = await discoverByTitle();
-  else if (mode === 'subagents') results = await discoverSubagents();
+  byCwd(target) {
+    return this.files().flatMap(file => {
+      const cwd = this.extractCwd(file);
+      return cwd && pathMatches(cwd, target) ? [{
+        sessionId: path.basename(file, '.jsonl'), title: this.extractTitle(file), cwd,
+        file, tool: 'claude-code', mtime: fileMTime(file),
+      }] : [];
+    });
+  }
 
-  results.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+  byTitle(query) {
+    const needle = String(query || '').toLowerCase();
+    return this.files().flatMap(file => {
+      const title = this.extractTitle(file);
+      return title && title.toLowerCase().includes(needle) ? [{
+        sessionId: path.basename(file, '.jsonl'), title, cwd: this.extractCwd(file),
+        file, tool: 'claude-code', mtime: fileMTime(file),
+      }] : [];
+    });
+  }
 
-  if (jsonOut) {
-    console.log(JSON.stringify(results, null, 2));
+  legacySubagents(query) {
+    const needle = String(query || '').toLowerCase();
+    return this.files().flatMap(file => {
+      const sessionId = path.basename(file, '.jsonl');
+      const title = this.extractTitle(file);
+      if (needle && sessionId.toLowerCase() !== needle && !(title || '').toLowerCase().includes(needle)) return [];
+      try {
+        const text = fs.readFileSync(file, 'utf8').slice(0, 10 * 1024 * 1024);
+        const match = text.match(/"environments":\s*{[^}]*"subagents":\s*"([^"]*)"/);
+        if (!match) return [];
+        const subagents = [];
+        for (const line of match[1].replace(/\\n/g, '\n').split('\n')) {
+          const item = line.match(/^\s*-\s+([a-fA-F0-9-]+)(?::\s+(.+))?$/);
+          if (item) subagents.push({ id: item[1], name: item[2] ? item[2].trim() : null });
+        }
+        return subagents.length ? [{ tool: 'claude-code', sessionId, title, file, subagents }] : [];
+      } catch { return []; }
+    });
+  }
+}
+
+class VSCodeDiscovery extends HarnessDiscovery {
+  configDirs() {
+    if (process.platform === 'win32') {
+      const appData = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
+      return [path.join(appData, 'Code'), path.join(appData, 'Code - Insiders')];
+    }
+    if (process.platform === 'darwin') {
+      const base = path.join(HOME, 'Library', 'Application Support');
+      return [path.join(base, 'Code'), path.join(base, 'Code - Insiders')];
+    }
+    const base = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
+    return [path.join(base, 'Code'), path.join(base, 'Code - Insiders')];
+  }
+
+  byCwd(target) {
+    const results = [];
+    for (const configDir of this.configDirs()) {
+      const storageRoot = path.join(configDir, 'User', 'workspaceStorage');
+      if (!fs.existsSync(storageRoot)) continue;
+      for (const workspace of fs.readdirSync(storageRoot, { withFileTypes: true })) {
+        if (!workspace.isDirectory()) continue;
+        const workspaceDir = path.join(storageRoot, workspace.name);
+        let folderPath;
+        try {
+          const manifest = JSON.parse(fs.readFileSync(path.join(workspaceDir, 'workspace.json'), 'utf8'));
+          const uri = manifest.folder || manifest.workspace;
+          if (!uri || !uri.startsWith('file:///')) continue;
+          folderPath = decodeURIComponent(uri.slice('file:///'.length));
+          if (folderPath.endsWith('.code-workspace')) folderPath = path.dirname(folderPath);
+        } catch { continue; }
+        if (!pathMatches(folderPath, target)) continue;
+        const sessionsDir = path.join(workspaceDir, 'chatSessions');
+        if (!fs.existsSync(sessionsDir)) continue;
+        for (const entry of fs.readdirSync(sessionsDir, { withFileTypes: true })) {
+          if (!entry.isFile() || !/\.jsonl?$/.test(entry.name)) continue;
+          const file = path.join(sessionsDir, entry.name);
+          results.push({
+            sessionId: path.basename(entry.name).replace(/\.jsonl?$/, ''),
+            cwd: folderPath, file, tool: 'vscode-copilot', mtime: fileMTime(file),
+          });
+        }
+      }
+    }
+    return results;
+  }
+}
+
+class CodexDiscovery extends HarnessDiscovery {
+  constructor(dbPath) {
+    super();
+    this.state = new CodexNativeState({ dbPath });
+  }
+
+  byCwd(target) {
+    if (this.state.dbPath) {
+      try {
+        return this.state.listThreadsByCwd(target).map(thread => ({
+          ...thread, sessionId: thread.threadId,
+          title: thread.title || thread.name || thread.agentNickname,
+          file: thread.rolloutPath || null, tool: 'codex', mtime: thread.updatedAt,
+        }));
+      } catch { /* use the rollout fallback below */ }
+    }
+    return this.rolloutFiles().flatMap(file => {
+      const cwd = this.extractCwd(file);
+      return cwd && pathMatches(cwd, target) ? [{
+        sessionId: this.sessionId(file), cwd, file, tool: 'codex', mtime: fileMTime(file),
+      }] : [];
+    });
+  }
+
+  byTitle(query) {
+    if (!this.state.dbPath) return [];
+    try {
+      return this.state.listThreadsByTitle(query).map(thread => ({
+        ...thread, sessionId: thread.threadId,
+        title: thread.title || thread.name || thread.agentNickname,
+        file: thread.rolloutPath || null, tool: 'codex', mtime: thread.updatedAt,
+      }));
+    } catch { return []; }
+  }
+
+  nativeSubagents(query, target, depth) {
+    if (!this.state.dbPath) return [];
+    try {
+      return this.state.listNativeSubagents(query, target, depth).map(parent => ({
+        ...parent, tool: 'codex-native',
+        children: parent.children.map(child => ({
+          ...child, sessionId: child.threadId,
+          title: child.title || child.name || child.agentNickname,
+        })),
+      }));
+    } catch { return []; }
+  }
+
+  legacySubagents(query) {
+    const needle = String(query || '').toLowerCase();
+    return this.rolloutFiles().flatMap(file => {
+      const sessionId = this.sessionId(file);
+      if (needle && sessionId.toLowerCase() !== needle) return [];
+      try {
+        const text = fs.readFileSync(file, 'utf8').slice(0, 10 * 1024 * 1024);
+        const match = text.match(/"environments":\s*{[^}]*"subagents":\s*"([^"]*)"/);
+        if (!match) return [];
+        const subagents = [];
+        for (const line of match[1].replace(/\\n/g, '\n').split('\n')) {
+          const item = line.match(/^\s*-\s+([a-fA-F0-9-]+)(?::\s+(.+))?$/);
+          if (item) subagents.push({ id: item[1], name: item[2] ? item[2].trim() : null });
+        }
+        return subagents.length ? [{ tool: 'codex-rollout', sessionId, file, subagents }] : [];
+      } catch { return []; }
+    });
+  }
+
+  rolloutFiles() {
+    const root = path.join(HOME, '.codex', 'sessions');
+    if (!fs.existsSync(root)) return [];
+    const files = [];
+    const walk = directory => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) walk(fullPath);
+        else if (entry.name.endsWith('.jsonl')) files.push(fullPath);
+      }
+    };
+    try { walk(root); } catch { return []; }
+    return files;
+  }
+
+  sessionId(file) {
+    return path.basename(file).match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1]
+      || path.basename(file, '.jsonl');
+  }
+}
+
+function printHuman(results, label, query) {
+  console.log(`🐕 sesh-hound sensing (${label}): ${query || '(current folder)'}\n`);
+  if (results.length === 0) console.log('  Nothing sensed.');
+  for (const result of results) {
+    console.log(`  [${result.tool}] ${result.sessionId || result.threadId}${result.mtime ? `  (last active: ${new Date(result.mtime).toISOString()})` : ''}`);
+    if (result.title) console.log(`      title: ${result.title}`);
+    if (result.agentNickname) console.log(`      nickname: ${result.agentNickname}`);
+    if (result.cwd) console.log(`      cwd:   ${result.cwd}`);
+    if (result.file) console.log(`      file:  ${result.file}`);
+    if (result.subagents) {
+      console.log('      legacy subagents:');
+      for (const subagent of result.subagents) {
+        console.log(`        - ${subagent.name || subagent.id}`);
+      }
+    }
+    if (result.children) {
+      console.log('      native children:');
+      for (const child of result.children) {
+        console.log(`        - ${child.agentNickname || child.name || child.sessionId} (${child.sessionId}) [${child.edgeStatus}]`);
+        if (child.title) console.log(`          title: ${child.title}`);
+        if (child.depth > 1) console.log(`          depth: ${child.depth}`);
+      }
+    }
+  }
+  console.log(`\n${results.length} result${results.length === 1 ? '' : 's'} sensed.`);
+}
+
+function run() {
+  const claude = new ClaudeDiscovery();
+  const vscode = new VSCodeDiscovery();
+  const codex = new CodexDiscovery(codexDbArg);
+  let results;
+  if (mode === 'by-cwd') {
+    const target = normalize(path.resolve(queryArg));
+    results = [...claude.byCwd(target), ...codex.byCwd(target), ...vscode.byCwd(target)];
+  } else if (mode === 'by-title') {
+    results = [...claude.byTitle(queryArg), ...codex.byTitle(queryArg)];
   } else {
-    const modeLabel = {'by-cwd': 'by folder', 'by-title': 'by title', 'subagents': 'subagents'}[mode];
-    console.log(`🐕 sesh-hound sensing (${modeLabel}): ${queryArg}\n`);
-    if (results.length === 0) console.log('  Nothing sensed.');
-    for (const r of results) {
-      console.log(`  [${r.tool}] ${r.sessionId}${r.mtime ? '  (last active: ' + r.mtime.toISOString() + ')' : ''}`);
-      if (r.title) console.log(`      title: ${r.title}`);
-      if (r.cwd) console.log(`      cwd:   ${r.cwd}`);
-      if (r.subagents?.length > 0) {
-        console.log(`      subagents:`);
-        r.subagents.forEach(s => console.log(`        - ${s.name}`));
-      }
-      console.log(`      file:  ${r.file}`);
-    }
-    console.log(`\n${results.length} result${results.length === 1 ? '' : 's'} sensed.`);
+    results = [
+      ...claude.legacySubagents(queryArg),
+      ...codex.nativeSubagents(queryArg, normalize(path.resolve(process.cwd())), depthArg),
+    ];
+    if (results.length === 0) results = codex.legacySubagents(queryArg);
   }
+  results.sort((a, b) => new Date(b.mtime || b.updatedAt || 0) - new Date(a.mtime || a.updatedAt || 0));
+  if (jsonOut) console.log(JSON.stringify(results, null, 2));
+  else printHuman(results, mode, queryArg);
 }
 
-run();
+try {
+  run();
+} catch (error) {
+  if (jsonOut) console.log(JSON.stringify({ error: error.message }, null, 2));
+  else console.error(`sesh-hound error: ${error.message}`);
+  process.exitCode = 1;
+}
