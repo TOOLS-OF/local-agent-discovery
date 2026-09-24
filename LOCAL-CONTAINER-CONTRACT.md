@@ -312,9 +312,10 @@ Before starting any Red Compose project:
    }
    ```
 
-   If this Docker build requires a non-default bridge to exist first, create
-   `docker0-red` in the Red distro before starting its Docker service. Never
-   make both daemons own `docker0`.
+   The Red distro must also have a systemd prerequisite that creates
+   `docker0-red` before `docker.service` and removes it after Docker stops. A
+   manual `ip link add` is only a diagnostic fallback; it is not a durable
+   bootstrap. Never make both daemons own `docker0`.
 4. Verify the Red engine identity and root differ from Blue:
 
    ```powershell

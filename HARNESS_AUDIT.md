@@ -1183,3 +1183,9 @@ currently-running version — a discipline this file's entries mostly lack
   remained on its existing eight-container grid throughout. `AGENTS.md` and
   `LOCAL-CONTAINER-CONTRACT.md` now document the shared-namespace failure,
   bootstrap, identity suffix/prefix rules, and fail-closed verification.
+
+- Follow-up runtime repair: Red now has a systemd `docker-red-bridge.service`
+  prerequisite wired to `docker.service`. A controlled stop, bridge removal,
+  and start recreated `docker0-red`, restored Docker, and brought back all
+  eight Red containers with healthy MariaDB services; no Blue container state
+  changed.
