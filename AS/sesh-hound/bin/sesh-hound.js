@@ -26,12 +26,20 @@
  *     dir holds the session *.jsonl files — NOT .json, a real gotcha.
  *
  * Usage:
- *   sesh-hound [cwd] [--json]
+ *   sesh-hound [cwd] [--json] [--stats] [--min-turns N]
  *
  * [cwd] defaults to the current directory if omitted. Matched as an exact
  * string OR as a path prefix (pointing at a parent folder finds sessions
  * from subfolders too) — path separators and case are normalized before
  * comparing, so this works the same on Windows, macOS, and Linux.
+ *
+ * --stats        Read each Claude Code session's full JSONL to emit per-session
+ *                counts: userTurns, assistantTurns, compactions, first/last
+ *                timestamps. Slower than the default metadata-only scan.
+ *
+ * --min-turns N  Suppress sessions with fewer than N user turns (requires
+ *                --stats). Useful for filtering single-exchange noise from
+ *                Q-semver lineage counts.
  */
 
 const fs = require('fs');
@@ -41,17 +49,27 @@ const os = require('os');
 const HOME = os.homedir();
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
+const statsMode = args.includes('--stats');
 const helpFlag = args.includes('--help') || args.includes('-h');
 const targetArg = args.find(a => !a.startsWith('-')) || process.cwd();
+
+let minTurns = 0;
+const minTurnsIdx = args.indexOf('--min-turns');
+if (minTurnsIdx !== -1 && args[minTurnsIdx + 1]) {
+  minTurns = parseInt(args[minTurnsIdx + 1], 10) || 0;
+}
 
 if (helpFlag) {
   console.log(`sesh-hound — sniff out Claude Code / Codex / VS Code Copilot sessions from a folder
 
 Usage:
-  sesh-hound [cwd] [--json]
+  sesh-hound [cwd] [--json] [--stats] [--min-turns N]
 
-  [cwd]    Folder to search from. Defaults to the current directory.
-  --json   Print machine-readable JSON instead of the friendly report.
+  [cwd]          Folder to search from. Defaults to the current directory.
+  --json         Print machine-readable JSON instead of the friendly report.
+  --stats        Read full JSONL to count turns, compactions, timestamps.
+                 (Claude Code only; slower than the default metadata scan.)
+  --min-turns N  Hide sessions with fewer than N user turns. Requires --stats.
 
 Matches the folder exactly, or as a path prefix — pointing at a parent
 folder also finds sessions from every subfolder underneath it.`);
@@ -72,6 +90,62 @@ function matches(cwd) {
 
 function fileMTime(p) {
   try { return fs.statSync(p).mtime; } catch { return null; }
+}
+
+function fileBirthtime(p) {
+  try {
+    const s = fs.statSync(p);
+    // birthtimeMs is 0 on filesystems that don't support birth time — fall back to mtime.
+    return s.birthtimeMs > 0 ? s.birthtime : s.mtime;
+  } catch { return null; }
+}
+
+/**
+ * Read a Claude Code JSONL file and return per-session stats.
+ *
+ * Compaction detection mirrors identify-instance-event-aware.js (v4, 2026-09-07):
+ * compact events are type="user" records whose message.content (string) includes
+ * "Compacted (ctrl+o to see full summary)". Legacy system/compact_boundary formats
+ * are intentionally not checked — they caused triple-counting in earlier versions.
+ */
+function readClaudeCodeStats(filePath) {
+  let userTurns = 0;
+  let assistantTurns = 0;
+  let compactions = 0;
+  let firstTimestamp = null;
+  let lastTimestamp = null;
+
+  let text;
+  try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
+
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+
+    const ts = rec.timestamp;
+    if (ts) {
+      if (!firstTimestamp || ts < firstTimestamp) firstTimestamp = ts;
+      if (!lastTimestamp || ts > lastTimestamp) lastTimestamp = ts;
+    }
+
+    if (rec.type === 'assistant') {
+      assistantTurns++;
+      continue;
+    }
+
+    if (rec.type === 'user') {
+      const content = rec.message && rec.message.content;
+      if (typeof content === 'string' &&
+          content.includes('Compacted (ctrl+o to see full summary)')) {
+        compactions++;
+      } else {
+        userTurns++;
+      }
+    }
+  }
+
+  return { userTurns, assistantTurns, compactions, firstTimestamp, lastTimestamp };
 }
 
 // ---------- Title resolution ----------
@@ -157,15 +231,21 @@ function scanClaudeCode() {
       } catch { continue; }
       if (matches(cwd)) {
         const title = resolveClaudeTitle(fullPath);
-        results.push({
+        const entry = {
           tool: 'claude-code',
           sessionId: f.replace(/\.jsonl$/, ''),
           cwd,
           file: fullPath,
           mtime: fileMTime(fullPath),
+          birthtime: fileBirthtime(fullPath),
           title,
           needsReview: !title,
-        });
+        };
+        if (statsMode) {
+          const stats = readClaudeCodeStats(fullPath);
+          if (stats) Object.assign(entry, stats);
+        }
+        results.push(entry);
       }
     }
   }
@@ -202,6 +282,7 @@ function scanCodex() {
             cwd,
             file: full,
             mtime: fileMTime(full),
+            birthtime: fileBirthtime(full),
             title,
             needsReview: !title,
           });
@@ -264,6 +345,7 @@ function scanVSCodeCopilot() {
           cwd: folderPath,
           file: full,
           mtime: fileMTime(full),
+          birthtime: fileBirthtime(full),
           title: null, // no known title store found yet for this tool
           needsReview: true,
         });
@@ -276,16 +358,25 @@ scanClaudeCode();
 scanCodex();
 scanVSCodeCopilot();
 
-results.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+results.sort((a, b) => {
+  const at = a.birthtime || a.mtime;
+  const bt = b.birthtime || b.mtime;
+  return (bt || 0) - (at || 0);
+});
+
+// Apply --min-turns filter (only meaningful with --stats)
+const filtered = (statsMode && minTurns > 0)
+  ? results.filter(r => (r.userTurns || 0) >= minTurns)
+  : results;
 
 if (jsonOut) {
-  console.log(JSON.stringify(results, null, 2));
+  console.log(JSON.stringify(filtered, null, 2));
 } else {
   console.log(`🐕 sesh-hound sniffing: ${targetArg}\n`);
-  if (results.length === 0) {
+  if (filtered.length === 0) {
     console.log('  Nothing here — no scent trail from this folder.');
   }
-  for (const r of results) {
+  for (const r of filtered) {
     const mtimeStr = r.mtime ? r.mtime.toISOString() : 'unknown';
     console.log(`  [${r.tool}] ${r.sessionId}  (last active: ${mtimeStr})`);
     if (r.title) {
@@ -295,8 +386,14 @@ if (jsonOut) {
     }
     console.log(`      cwd:  ${r.cwd}`);
     console.log(`      file: ${r.file}`);
+    if (statsMode && r.userTurns !== undefined) {
+      const compact = r.compactions > 0 ? `  compactions: ${r.compactions}` : '';
+      const trivial = r.userTurns <= 1 && r.compactions === 0 ? '  [trivial]' : '';
+      console.log(`      turns: user=${r.userTurns}  assistant=${r.assistantTurns}${compact}${trivial}`);
+    }
   }
-  const needingReview = results.filter(r => r.needsReview).length;
-  console.log(`\n${results.length} session${results.length === 1 ? '' : 's'} found` +
-    (needingReview ? `, ${needingReview} with no title (identity needs chat analysis).` : '.'));
+  const needingReview = filtered.filter(r => r.needsReview).length;
+  const trivialSuffix = (statsMode && minTurns > 0) ? ` (${results.length - filtered.length} trivial filtered)` : '';
+  console.log(`\n${filtered.length} session${filtered.length === 1 ? '' : 's'} found` +
+    (needingReview ? `, ${needingReview} with no title (identity needs chat analysis).` : '.') + trivialSuffix);
 }
