@@ -19,6 +19,12 @@ const dbIndex = args.indexOf('--codex-db');
 const codexDbArg = dbIndex >= 0 ? args[dbIndex + 1] : null;
 const depthIndex = args.indexOf('--depth');
 const depthArg = depthIndex >= 0 ? Number(args[depthIndex + 1]) : 1;
+const claudeDepthIndex = args.indexOf('--claude-depth');
+const claudeDepthArg = claudeDepthIndex >= 0 ? Number(args[claudeDepthIndex + 1]) : 2;
+
+if (!Number.isInteger(claudeDepthArg) || claudeDepthArg < 0) {
+  throw new Error('--claude-depth must be a non-negative integer.');
+}
 
 function valueAfter(flag) {
   const index = args.indexOf(flag);
@@ -34,6 +40,7 @@ Usage:
   sesh-hound --subagents <id-or-name> [--depth N] [--json]
   sesh-hound --codex-native-subagents [id-or-name] [--depth N] [--json]
   sesh-hound --codex-repair-report [id-or-name] [--depth N] [--json]
+  sesh-hound [cwd] [--claude-depth N] [--json]
   sesh-hound --codex-db <path> ...
 
 Discovery depth:
@@ -44,6 +51,10 @@ Discovery depth:
                current Codex parent/child graph.
   repair       Read-only manifest mapping historical child IDs to candidate
                native control IDs without claiming recovery.
+
+Claude tape-closet depth:
+  --claude-depth N  Search N levels below each ~/.claude/projects tape closet
+                    (default: 2; 0 keeps the historical direct-file scan).
 
 Codex uses the newest ~/.codex/state_*.sqlite by default. The indexed database
 avoids recursively opening every rollout file; --codex-db overrides it.
@@ -58,12 +69,13 @@ Related tools:
 
 function findPositional() {
   const skipped = new Set(['--json', '--help', '-h', '--by-title', '--subagents',
-    '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth']);
+    '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth',
+    '--claude-depth']);
   const values = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (skipped.has(arg)) {
-      if (['--by-title', '--subagents', '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth'].includes(arg)) index += 1;
+      if (['--by-title', '--subagents', '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth', '--claude-depth'].includes(arg)) index += 1;
       continue;
     }
     if (!arg.startsWith('-')) values.push(arg);
@@ -106,44 +118,110 @@ class HarnessDiscovery {
 }
 
 class ClaudeDiscovery extends HarnessDiscovery {
+  constructor(depth = 2) {
+    super();
+    this.depth = depth;
+    this._files = null;
+  }
+
+  projectsRoot() {
+    return process.env.SESH_HOUND_CLAUDE_PROJECTS
+      || path.join(HOME, '.claude', 'projects');
+  }
+
   files() {
-    const root = path.join(HOME, '.claude', 'projects');
+    if (this._files) return this._files;
+    const root = this.projectsRoot();
     if (!fs.existsSync(root)) return [];
     const files = [];
-    for (const directory of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!directory.isDirectory()) continue;
-      const dirPath = path.join(root, directory.name);
-      for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
-        if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(path.join(dirPath, entry.name));
+    const skipDirectories = new Set(['compaction-summaries', 'tool-results']);
+    const walk = (directory, depth) => {
+      let entries;
+      try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+          files.push(fullPath);
+        } else if (entry.isDirectory() && depth < this.depth && !skipDirectories.has(entry.name)) {
+          walk(fullPath, depth + 1);
+        }
       }
+    };
+
+    let projects;
+    try { projects = fs.readdirSync(root, { withFileTypes: true }); } catch { return []; }
+    for (const project of projects) {
+      if (project.isDirectory()) walk(path.join(root, project.name), 0);
     }
+    this._files = files;
     return files;
   }
 
+  tapeCloset(filePath) {
+    const relative = path.relative(this.projectsRoot(), filePath);
+    const [closet] = relative.split(path.sep);
+    return closet || null;
+  }
+
+  tapeDepth(filePath) {
+    const relative = path.relative(this.projectsRoot(), filePath);
+    const segments = relative.split(path.sep).filter(Boolean);
+    return Math.max(0, segments.length - 2);
+  }
+
+  dedupeSessions(results) {
+    const sessions = new Map();
+    for (const result of results) {
+      const key = `${result.tool}:${result.sessionId}`;
+      const previous = sessions.get(key);
+      if (!previous) {
+        sessions.set(key, result);
+        continue;
+      }
+
+      const previousTime = new Date(previous.mtime || 0).getTime();
+      const currentTime = new Date(result.mtime || 0).getTime();
+      const winner = currentTime >= previousTime ? result : previous;
+      winner.duplicateCount = (previous.duplicateCount || 1) + 1;
+      winner.duplicateFiles = [...new Set([
+        ...(previous.duplicateFiles || [previous.file]),
+        ...(result.duplicateFiles || [result.file]),
+      ])];
+      winner.duplicateTapeClosets = [...new Set([
+        ...(previous.duplicateTapeClosets || [previous.tapeCloset].filter(Boolean)),
+        ...(result.duplicateTapeClosets || [result.tapeCloset].filter(Boolean)),
+      ])];
+      sessions.set(key, winner);
+    }
+    return [...sessions.values()];
+  }
+
   byCwd(target) {
-    return this.files().flatMap(file => {
+    return this.dedupeSessions(this.files().flatMap(file => {
       const cwd = this.extractCwd(file);
       return cwd && pathMatches(cwd, target) ? [{
         sessionId: path.basename(file, '.jsonl'), title: this.extractTitle(file), cwd,
         file, tool: 'claude-code', mtime: fileMTime(file),
+        tapeCloset: this.tapeCloset(file), tapeDepth: this.tapeDepth(file),
       }] : [];
-    });
+    }));
   }
 
   byTitle(query) {
     const needle = String(query || '').toLowerCase();
-    return this.files().flatMap(file => {
+    return this.dedupeSessions(this.files().flatMap(file => {
       const title = this.extractTitle(file);
       return title && title.toLowerCase().includes(needle) ? [{
         sessionId: path.basename(file, '.jsonl'), title, cwd: this.extractCwd(file),
         file, tool: 'claude-code', mtime: fileMTime(file),
+        tapeCloset: this.tapeCloset(file), tapeDepth: this.tapeDepth(file),
       }] : [];
-    });
+    }));
   }
 
   legacySubagents(query) {
     const needle = String(query || '').toLowerCase();
-    return this.files().flatMap(file => {
+    return this.dedupeSessions(this.files().flatMap(file => {
       const sessionId = path.basename(file, '.jsonl');
       const title = this.extractTitle(file);
       if (needle && sessionId.toLowerCase() !== needle && !(title || '').toLowerCase().includes(needle)) return [];
@@ -156,9 +234,10 @@ class ClaudeDiscovery extends HarnessDiscovery {
           const item = line.match(/^\s*-\s+([a-fA-F0-9-]+)(?::\s+(.+))?$/);
           if (item) subagents.push({ id: item[1], name: item[2] ? item[2].trim() : null });
         }
-        return subagents.length ? [{ tool: 'claude-code', sessionId, title, file, subagents }] : [];
+        return subagents.length ? [{ tool: 'claude-code', sessionId, title, file,
+          tapeCloset: this.tapeCloset(file), tapeDepth: this.tapeDepth(file), subagents }] : [];
       } catch { return []; }
-    });
+    }));
   }
 }
 
@@ -313,6 +392,11 @@ function printHuman(results, label, query) {
     if (result.agentNickname) console.log(`      nickname: ${result.agentNickname}`);
     if (result.cwd) console.log(`      cwd:   ${result.cwd}`);
     if (result.file) console.log(`      file:  ${result.file}`);
+    if (result.tapeCloset) console.log(`      tape:  ${result.tapeCloset} (depth ${result.tapeDepth})`);
+    if (result.duplicateCount > 1) {
+      console.log(`      duplicates: ${result.duplicateCount} copies; newest tape selected`);
+      if (result.duplicateTapeClosets?.length) console.log(`      copies: ${result.duplicateTapeClosets.join(', ')}`);
+    }
     if (result.subagents) {
       console.log('      legacy subagents:');
       for (const subagent of result.subagents) {
@@ -359,7 +443,7 @@ function run() {
     return;
   }
 
-  const claude = new ClaudeDiscovery();
+  const claude = new ClaudeDiscovery(claudeDepthArg);
   const vscode = new VSCodeDiscovery();
   let results;
   if (mode === 'by-cwd') {
