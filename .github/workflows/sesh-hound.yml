@@ -1,0 +1,29 @@
+name: sesh-hound
+
+on:
+  push:
+    branches: [main, devline]
+    paths:
+      - 'AS/sesh-hound/**'
+      - 'lib/**'
+      - '.github/workflows/sesh-hound.yml'
+  pull_request:
+    paths:
+      - 'AS/sesh-hound/**'
+      - 'lib/**'
+      - '.github/workflows/sesh-hound.yml'
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Test sesh-hound
+        working-directory: AS/sesh-hound
+        run: npm test
