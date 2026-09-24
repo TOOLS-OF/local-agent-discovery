@@ -2,6 +2,9 @@
   "name": "sesh-hound",
   "version": "1.0.0",
   "description": "Sniff out every Claude Code, Codex, and VS Code Copilot Chat session spawned from a given folder — across Windows, macOS, and Linux.",
+  "scripts": {
+    "test": "node test/sesh-hound.test.js"
+  },
   "bin": {
     "sesh-hound": "./bin/sesh-hound.js"
   },

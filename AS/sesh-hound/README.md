@@ -22,9 +22,18 @@ sesh-hound --subagents meridian  # resolve a parent and list native children
 sesh-hound --codex-native-subagents 019f68b6-7e58-7621-9f32-410588171513 --json
 sesh-hound --subagents meridian --depth 2
 sesh-hound --codex-repair-report meridian --json
+sesh-hound . --claude-depth 3   # include nested Claude tape closets
 ```
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
+Claude project directories are tape closets, and current Claude layouts can put a
+session tape below a nested agent closet. `sesh-hound` searches two levels below each
+Claude project closet by default; use `--claude-depth N` to choose a different bounded
+depth. Depth `0` preserves the fast direct-file scan. Known `compaction-summaries` and
+`tool-results` folders are skipped because they are artifacts, not session tapes.
+If copied or resumed Claude data leaves the same session UUID in more than one closet,
+the newest tape wins and the JSON/human result retains duplicate-count and closet
+provenance instead of reporting the same session twice.
 
 ## What it actually does
 
@@ -38,7 +47,7 @@ is selected.
 
 | Tool | Where sessions live | How cwd is found |
 |---|---|---|
-| Claude Code | `~/.claude/projects/<escaped-cwd>/*.jsonl` | plain `"cwd"` field in event content |
+| Claude Code | `~/.claude/projects/<escaped-cwd>/**/*.jsonl` (bounded) | plain `"cwd"` field in event content |
 | Codex | `~/.codex/state_*.sqlite` (indexed), rollout files as fallback | `threads.cwd`; native children use `thread_spawn_edges` |
 | VS Code Copilot Chat | `<vscode-config>/User/workspaceStorage/<hash>/chatSessions/*.jsonl` | `file://` URI in the matching `workspace.json` |
 
@@ -76,6 +85,20 @@ The neighboring tools have deliberately separate jobs:
 | `sesh-stork` | deliver a session artifact to another harness |
 
 Discovery is read-only. It is not a transport or permission mechanism.
+
+## Dogfooding a branch without replacing the installed tool
+
+From a checkout of this repository, run the local entrypoint directly:
+
+```bash
+node AS/sesh-hound/bin/sesh-hound-extended.js /path/to/project --claude-depth 3
+npm --prefix AS/sesh-hound test
+```
+
+This exercises the branch's code without changing a global npm install or the
+system `sesh-hound` wrapper. Once the branch is reviewed, install it into a
+separate user-local prefix if desired; do not overwrite the system prefix while
+comparing behavior.
 
 ## License
 
