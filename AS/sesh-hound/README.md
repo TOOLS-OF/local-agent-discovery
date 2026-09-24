@@ -21,6 +21,7 @@ sesh-hound --by-title Bernoulli  # resolve a title or nickname
 sesh-hound --subagents meridian  # resolve a parent and list native children
 sesh-hound --codex-native-subagents 019f68b6-7e58-7621-9f32-410588171513 --json
 sesh-hound --subagents meridian --depth 2
+sesh-hound --codex-repair-report meridian --json
 ```
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
@@ -56,6 +57,13 @@ Use the modes in order: folder to find sessions, title to resolve identity, then
 case-insensitive title, `name`, nickname, or role. `--depth 2` follows one additional
 native edge. Results include real Codex thread IDs, edge status, names, titles, and rollout
 paths; discovery does not claim that it can contact or resume an agent.
+
+`--codex-repair-report` produces a read-only manifest for recovery work. It
+keeps the historical `thread_spawn_edges.child_thread_id` beside the candidate
+native control ID and explicitly marks control status as `unverified`. The
+state database cannot prove that the current `multi_agent_v1` service still
+owns a live handle, so this mode never relabels a new child or claims that a
+child was recovered.
 
 The neighboring tools have deliberately separate jobs:
 

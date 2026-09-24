@@ -33,6 +33,7 @@ Usage:
   sesh-hound --by-title <name> [--json]
   sesh-hound --subagents <id-or-name> [--depth N] [--json]
   sesh-hound --codex-native-subagents [id-or-name] [--depth N] [--json]
+  sesh-hound --codex-repair-report [id-or-name] [--depth N] [--json]
   sesh-hound --codex-db <path> ...
 
 Discovery depth:
@@ -41,6 +42,8 @@ Discovery depth:
   subagents    Resolve a parent by UUID or name, then list native children.
   native       Codex-only alias for subagents; useful when proving the
                current Codex parent/child graph.
+  repair       Read-only manifest mapping historical child IDs to candidate
+               native control IDs without claiming recovery.
 
 Codex uses the newest ~/.codex/state_*.sqlite by default. The indexed database
 avoids recursively opening every rollout file; --codex-db overrides it.
@@ -55,12 +58,12 @@ Related tools:
 
 function findPositional() {
   const skipped = new Set(['--json', '--help', '-h', '--by-title', '--subagents',
-    '--codex-native-subagents', '--codex-db', '--depth']);
+    '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth']);
   const values = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (skipped.has(arg)) {
-      if (['--by-title', '--subagents', '--codex-native-subagents', '--codex-db', '--depth'].includes(arg)) index += 1;
+      if (['--by-title', '--subagents', '--codex-native-subagents', '--codex-repair-report', '--codex-db', '--depth'].includes(arg)) index += 1;
       continue;
     }
     if (!arg.startsWith('-')) values.push(arg);
@@ -79,6 +82,9 @@ if (args.includes('--by-title')) {
 } else if (args.includes('--codex-native-subagents')) {
   mode = 'native-subagents';
   queryArg = valueAfter('--codex-native-subagents');
+} else if (args.includes('--codex-repair-report')) {
+  mode = 'repair-report';
+  queryArg = valueAfter('--codex-repair-report');
 }
 
 class HarnessDiscovery {
@@ -251,6 +257,13 @@ class CodexDiscovery extends HarnessDiscovery {
     } catch { return []; }
   }
 
+  repairReport(query, target, depth) {
+    if (!this.state.dbPath) return null;
+    try {
+      return this.state.repairReport(query, target, depth);
+    } catch { return null; }
+  }
+
   legacySubagents(query) {
     const needle = String(query || '').toLowerCase();
     return this.rolloutFiles().flatMap(file => {
@@ -318,6 +331,24 @@ function printHuman(results, label, query) {
   console.log(`\n${results.length} result${results.length === 1 ? '' : 's'} sensed.`);
 }
 
+function printRepairHuman(report, query) {
+  console.log(`🐕 sesh-hound read-only repair report: ${query || '(current folder)'}\n`);
+  console.log(`  control plane: ${report.controlPlane.service} (${report.controlPlane.status})`);
+  console.log(`  database evidence: ${report.evidence.edgeRows} child edge row${report.evidence.edgeRows === 1 ? '' : 's'}`);
+  for (const parent of report.parents) {
+    console.log(`  parent: ${parent.name || parent.title || parent.threadId}`);
+    console.log(`    id: ${parent.threadId}`);
+    for (const child of parent.children) {
+      const identity = child.agentNickname || child.name || child.title || child.threadId;
+      console.log(`    - ${identity} (${child.threadId}) edge=${child.edgeStatus}, control=${child.controlStatus}`);
+      if (child.model) console.log(`      model: ${child.model}`);
+      if (child.historyMode) console.log(`      history: ${child.historyMode}`);
+    }
+  }
+  console.log(`\n  ${report.controlPlane.note}`);
+  console.log(`  ${report.evidence.limitation}`);
+}
+
 function run() {
   const claude = new ClaudeDiscovery();
   const vscode = new VSCodeDiscovery();
@@ -334,6 +365,13 @@ function run() {
       ...codex.nativeSubagents(queryArg, normalize(path.resolve(process.cwd())), depthArg),
     ];
     if (results.length === 0) results = codex.legacySubagents(queryArg);
+  }
+  if (mode === 'repair-report') {
+    const report = codex.repairReport(queryArg, normalize(path.resolve(process.cwd())), depthArg);
+    if (!report) throw new Error('No Codex state database found or repair report could not be read.');
+    if (jsonOut) console.log(JSON.stringify(report, null, 2));
+    else printRepairHuman(report, queryArg);
+    return;
   }
   results.sort((a, b) => new Date(b.mtime || b.updatedAt || 0) - new Date(a.mtime || a.updatedAt || 0));
   if (jsonOut) console.log(JSON.stringify(results, null, 2));
