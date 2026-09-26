@@ -1,0 +1,30 @@
+{
+  "name": "sesh-rabbit",
+  "version": "0.1.0",
+  "description": "Agent sensorium: reads a live session tape and produces structured self-awareness data — timeline, context fill, role ratios, latencies, instance/compaction count. Outputs JSON for machine consumption or renders a statusline/HUD for human-facing terminals. Adapters for Claude Code (implemented), Codex and Copilot (interface stubs).",
+  "bin": {
+    "sesh-rabbit": "./bin/sesh-rabbit.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "keywords": [
+    "claude-code",
+    "codex",
+    "copilot",
+    "cli",
+    "agent",
+    "sensorium",
+    "statusline",
+    "hud",
+    "session",
+    "swarm"
+  ],
+  "license": "MIT",
+  "author": "hazrat-rabbit"
+}

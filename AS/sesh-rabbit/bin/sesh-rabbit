@@ -1,0 +1,3 @@
+#!/bin/sh
+# sesh-rabbit — POSIX shell shim (macOS / Linux)
+exec node "$(dirname "$0")/sesh-rabbit.js" "$@"
