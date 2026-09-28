@@ -41,6 +41,7 @@ function parseArgs(argv) {
     else if (a === '--session') args.sessionRef = argv[++i];
     else if (a === '--cwd') args.cwd = argv[++i];
     else if (a === '--model') args.model = argv[++i];
+    else if (a === '--tools') args.tools = argv[++i];
     else if (a === '--skip-permissions') args.skipPermissions = true;
     else if (a === '--no-skip-permissions') args.skipPermissions = false;
     else if (a === '--harness') args.harness = argv[++i];
@@ -81,6 +82,11 @@ Usage:
                         from somewhere else).
   --model               Overrides the "model:" field read from the agent's own
                         frontmatter. Required if the agent file has no "model:" line.
+  --tools               Comma-separated tool list passed as --tools to claude, overriding
+                        what the agent's "tools:" frontmatter specifies. If the agent
+                        file has a "tools:" list and --tools is not given, the frontmatter
+                        list is forwarded automatically — the tool restriction is enforced
+                        at launch, not just narrated in the system prompt.
   --title               Overrides the default display title (the agent name,
                         capitalized). Recommended if the agent has a real card/name
                         peers should see in ListAgents instead of the bare filename.
@@ -100,11 +106,40 @@ function readAgentFile(project, agentName) {
   const content = fs.readFileSync(file, 'utf8');
   const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   let model = null;
+  let tools = null;
   if (fm) {
-    const modelLine = fm[1].split(/\r?\n/).find((l) => /^model:\s*/.test(l));
+    const lines = fm[1].split(/\r?\n/);
+    const modelLine = lines.find((l) => /^model:\s*/.test(l));
     if (modelLine) model = modelLine.replace(/^model:\s*/, '').trim();
+
+    // Parse tools: frontmatter — two supported formats:
+    //   tools: Read, Write, Edit          (single-line, comma-separated)
+    //   tools:                            (YAML block list)
+    //     - Read
+    //     - Write
+    const toolsLineIdx = lines.findIndex((l) => /^tools:/.test(l));
+    if (toolsLineIdx !== -1) {
+      const toolsLineVal = lines[toolsLineIdx].replace(/^tools:\s*/, '').trim();
+      if (toolsLineVal) {
+        // Single-line: tools: Read, Write, Edit  or  tools: [Read, Write]
+        tools = toolsLineVal.replace(/^\[|\]$/g, '').trim();
+      } else {
+        // YAML block list: collect `  - ToolName` lines that follow until next key
+        const items = [];
+        for (let i = toolsLineIdx + 1; i < lines.length; i++) {
+          const m = lines[i].match(/^\s+-\s+(.+)$/);
+          if (m) {
+            items.push(m[1].trim());
+          } else if (/^\S/.test(lines[i])) {
+            // Next top-level key — stop
+            break;
+          }
+        }
+        if (items.length > 0) tools = items.join(',');
+      }
+    }
   }
-  return { file, model };
+  return { file, model, tools };
 }
 
 function main() {
@@ -131,6 +166,10 @@ function main() {
     process.exit(1);
   }
 
+  // CLI --tools overrides frontmatter; frontmatter tools used if CLI omits it; null if neither.
+  // Enforces the agent file's tool restriction at launch — not just in its system prompt.
+  const tools = args.tools !== undefined ? args.tools : agent.tools;
+
   const cwd = args.cwd || args.project;
   const title = args.title || (args.agentName.charAt(0).toUpperCase() + args.agentName.slice(1));
 
@@ -153,6 +192,7 @@ function main() {
       skipPermissions: args.skipPermissions,
       title: action === 'attach' ? undefined : title,
       agent: action === 'attach' ? undefined : args.agentName,
+      tools: action === 'attach' ? undefined : (tools || undefined),
     });
   } catch (e) {
     console.error('sesh-name error:', e.message);
