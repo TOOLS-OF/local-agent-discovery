@@ -48,8 +48,9 @@ const target = normalize(path.resolve(opt.query));
 function scope(cwd) { const n = normalize(cwd); if (!n) return null; if (n === target) return 'exact'; if (!opt.exact && n.startsWith(`${target}/`)) return 'descendant'; if (!opt.exact && target.startsWith(`${n}/`)) return 'ancestor'; return null; }
 function cachePath() { return path.resolve(opt.cache || path.join(process.platform === 'win32' ? (process.env.LOCALAPPDATA || HOME) : (process.env.XDG_CACHE_HOME || path.join(HOME, '.cache')), 'sesh-hound', 'rancor-monster-v1.json')); }
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
-const cacheFile = cachePath(); const cache = readJson(cacheFile, { version: 1, files: {} });
+const cacheFile = cachePath(); const cache = readJson(cacheFile, { version: 2, files: {}, childRosters: {} });
 if (!cache.files) cache.files = {};
+if (!cache.childRosters) cache.childRosters = {};
 const routes = opt.routes ? (readJson(path.resolve(opt.routes), {}).routes || {}) : {};
 function stat(file) { try { const s = fs.statSync(file); return { size: s.size, mtimeMs: s.mtimeMs, mtime: s.mtime.toISOString() }; } catch { return null; } }
 function readRange(file, start, length) { const fd = fs.openSync(file, 'r'); try { const b = Buffer.alloc(length); const n = fs.readSync(fd, b, 0, length, start); return b.slice(0, n).toString('utf8'); } finally { fs.closeSync(fd); } }
@@ -106,12 +107,56 @@ function walk(dir, visit) { let entries; try { entries = fs.readdirSync(dir, { w
 function codex() { const out = []; const root = path.join(HOME, '.codex', 'sessions'); if (!fs.existsSync(root)) return out; walk(root, (file, name) => { if (!name.endsWith('.jsonl')) return; const old = cache.files[file]; let meta = old && old.meta; if (!meta) { const item = jsonlHead(file).find(x => x.type === 'session_meta'); meta = item && item.payload || {}; } if (!meta.cwd || (opt.mode !== 'title' && !scope(meta.cwd))) return; const i = inspectCodex(file, meta); if (!i) return; const id = (name.match(/([0-9a-f-]{36})\.jsonl$/i) || [])[1] || name.replace(/\.jsonl$/, ''); const r = record('codex', id, i.meta.cwd, file, i.stat, i.meta, i.compactions); if (r) out.push(r); }); return out; }
 function claude() { const out = []; const root = path.join(HOME, '.claude', 'projects'); if (!fs.existsSync(root)) return out; walk(root, (file, name) => { if (!name.endsWith('.jsonl')) return; const s = stat(file); if (!s) return; let head; try { head = readRange(file, 0, Math.min(s.size, 65536)); } catch { return; } const cwd = (head.match(/"cwd"\s*:\s*"([^\"]*)"/) || [])[1]; if (!cwd) return; const id = name.replace(/\.jsonl$/, ''); const title = (head.match(/"(?:customTitle|slug)"\s*:\s*"([^\"]*)"/) || [])[1] || null; const r = record('claude-code', id, cwd.replace(/\\\\/g, '\\'), file, s, { agent_nickname: title }, null); if (r) out.push(r); }); return out; }
 function copilot() { const out = []; const bases = process.platform === 'win32' ? [path.join(process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming'), 'Code'), path.join(process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming'), 'Code - Insiders')] : []; for (const base of bases) { const store = path.join(base, 'User', 'workspaceStorage'); if (!fs.existsSync(store)) continue; for (const hash of fs.readdirSync(store)) { const dir = path.join(store, hash); let cwd; try { const ws = readJson(path.join(dir, 'workspace.json'), {}); cwd = decodeURIComponent((ws.folder || ws.workspace || '').replace('file:///', '')); } catch { continue; } const chats = path.join(dir, 'chatSessions'); if (!cwd || !fs.existsSync(chats)) continue; for (const name of fs.readdirSync(chats)) { if (!/\.jsonl?$/.test(name)) continue; const file = path.join(chats, name); const s = stat(file); const r = s && record(`vscode-copilot (${path.basename(base)})`, name.replace(/\.jsonl?$/, ''), cwd, file, s, {}, null); if (r) out.push(r); } } } return out; }
-function locate(id) { const all = [...codex(), ...claude()]; return all.find(r => r.sessionId === id) || null; }
+function locate(id) {
+  const all = [...codex(), ...claude()]; const scoped = all.find(r => r.sessionId === id); if (scoped) return scoped;
+  const root = path.join(HOME, '.codex', 'sessions'); let found = null;
+  if (fs.existsSync(root)) walk(root, (file, name) => {
+    if (found || !name.endsWith('.jsonl') || !name.includes(id)) return;
+    const s = stat(file); if (!s) return;
+    const item = jsonlHead(file).find(x => x.type === 'session_meta'); const meta = item && item.payload || {};
+    found = { sessionId: id, cwd: meta.cwd || null, file, stat: s, meta };
+  });
+  return found;
+}
+function declaredChildren(file, s) {
+  const cached = cache.childRosters[file];
+  if (cached && cached.size === s.size && cached.mtimeMs === s.mtimeMs) return cached.children;
+  const byId = new Map();
+  const fd = fs.openSync(file, 'r'); let offset = 0; let carry = '';
+  try {
+    while (offset < s.size) {
+      const length = Math.min(1024 * 1024, s.size - offset); const buffer = Buffer.alloc(length);
+      const bytes = fs.readSync(fd, buffer, 0, length, offset); if (!bytes) break;
+      const text = carry + buffer.slice(0, bytes).toString('utf8'); const lines = text.split(/\r?\n/);
+      carry = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.includes('receiver_agents')) continue;
+        let item; try { item = JSON.parse(line); } catch { continue; }
+        const agents = item?.payload?.item?.receiver_agents || item?.payload?.receiver_agents || [];
+        for (const agent of agents) {
+          const childId = agent.thread_id || agent.threadId;
+          if (!childId) continue;
+          byId.set(childId, { sessionId: childId, nativeHandle: childId, displayName: agent.agent_nickname || agent.nickname || null, lastObservedAt: item.timestamp || null, lifecycle: 'historical-native-child' });
+        }
+      }
+      offset += bytes;
+    }
+  } finally { fs.closeSync(fd); }
+  const children = [...byId.values()];
+  cache.childRosters[file] = { size: s.size, mtimeMs: s.mtimeMs, children };
+  return children;
+}
 function children(id) {
   const mapped = routes[id] && Array.isArray(routes[id].children) ? routes[id].children : [];
   if (mapped.length) return mapped.map(child => ({ sessionId: child.sessionId || null, nativeHandle: child.nativeHandle || null, displayName: child.displayName || null, parent: id, summon: 'through-parent', kind: child.kind || 'native-subagent', evidence: 'route-map' }));
   const parent = locate(id); if (!parent) return [];
-  try { const text = fs.readFileSync(parent.file, 'utf8'); const m = text.match(/"subagents"\s*:\s*"([^\"]+)"/); if (!m) return []; return m[1].replace(/\\n/g, '\n').split('\n').map(x => x.match(/^\s*-\s+([a-f0-9-]+)\s*:\s*(.+)$/i)).filter(Boolean).map(x => ({ sessionId: x[1], nativeHandle: null, displayName: x[2].trim(), parent: id, summon: 'through-parent', kind: 'native-subagent', evidence: 'parent-transcript' })); } catch { return []; }
+  try {
+    const parentStat = stat(parent.file); if (!parentStat) return [];
+    const observed = declaredChildren(parent.file, parentStat);
+    if (observed.length) return observed.map(child => ({ ...child, parent: id, summon: 'through-parent', kind: 'native-subagent', evidence: 'parent-tool-event' }));
+    const text = readRange(parent.file, 0, Math.min(parentStat.size, 1024 * 1024)); const m = text.match(/"subagents"\s*:\s*"([^\"]+)"/); if (!m) return [];
+    return m[1].replace(/\\n/g, '\n').split('\n').map(x => x.match(/^\s*-\s+([a-f0-9-]+)\s*:\s*(.+)$/i)).filter(Boolean).map(x => ({ sessionId: x[1], nativeHandle: null, displayName: x[2].trim(), parent: id, summon: 'through-parent', kind: 'native-subagent', lifecycle: 'historical-native-child', evidence: 'parent-session-meta' }));
+  } catch { return []; }
 }
 let sessions;
 if (opt.mode === 'subagents') sessions = children(opt.query); else { sessions = [...codex(), ...claude(), ...copilot()]; if (opt.mode === 'title') { const needle = opt.query.toLowerCase(); sessions = sessions.filter(x => String(x.displayName || '').toLowerCase().includes(needle)); } }
