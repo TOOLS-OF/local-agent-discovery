@@ -34,7 +34,8 @@ Usage:
               [--reasoning-effort <effort>]
               [--harness claude-code|codex] [--dry-run] [--json]
 
-  --session             Session id or transcript path to resume (required)
+  --session             Session id or transcript path to resume (required). Codex also accepts
+                        a GUI deep link shaped codex://threads/<uuid>
   --cwd                 Working directory for the launched session (required)
   --model               Model to run at (required - see lib/session-launch.js for why this
                          is never optional on either harness)

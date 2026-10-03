@@ -47,6 +47,18 @@ For Codex, `--reasoning-effort` is also required. This prevents a resumed
 thread from silently inheriting a different effort level from the user's
 current `config.toml`.
 
+Codex `--session` accepts either the bare UUID or the GUI's copied deep link:
+
+```bash
+sesh-falcon --session codex://threads/01a0febd-b034-7b60-a03c-e7ddf96147ec \
+  --cwd C:\\work --model gpt-5.6-terra --reasoning-effort medium \
+  --skip-permissions --harness codex
+```
+
+The deep link is normalized to its UUID before invoking `codex resume`.
+Malformed links, query strings, fragments, and non-UUID session references
+are rejected instead of being passed through to a shell command.
+
 ## What it actually does
 
 Polymorphic design in `lib/session-launch.js`, mirroring `SessionDiscovery`,
@@ -56,7 +68,7 @@ its own required parameters and building the exact command with real,
 verified flags:
 
 - **`ClaudeSessionLauncher`**: `claude --resume "<sessionRef>" --model <model> [--dangerously-skip-permissions]`
-- **`CodexSessionLauncher`**: `codex resume <sessionRef> --model <model> --config model_reasoning_effort=<effort> --cd "<cwd>" [--dangerously-bypass-approvals-and-sandbox]`
+- **`CodexSessionLauncher`**: `codex resume <sessionUuid> --model <model> --config model_reasoning_effort=<effort> --cd "<cwd>" [--dangerously-bypass-approvals-and-sandbox]`
   (flags verified directly against real `codex resume --help` output, not assumed)
 
 ## License
