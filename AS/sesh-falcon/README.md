@@ -35,12 +35,17 @@ npm install -g .          # from inside this folder
 ```bash
 sesh-falcon --session <id-or-path> --cwd <folder> --model <model> \
             (--skip-permissions | --no-skip-permissions) \
+            [--reasoning-effort <effort>] \
             [--harness claude-code|codex] [--dry-run] [--json]
 ```
 
 There is deliberately no default for `--model` or the permission-mode
 flags. Omitting them is an error, not a fallback — the three failure modes
 above are worse than forcing the caller to decide every time.
+
+For Codex, `--reasoning-effort` is also required. This prevents a resumed
+thread from silently inheriting a different effort level from the user's
+current `config.toml`.
 
 ## What it actually does
 
@@ -51,7 +56,7 @@ its own required parameters and building the exact command with real,
 verified flags:
 
 - **`ClaudeSessionLauncher`**: `claude --resume "<sessionRef>" --model <model> [--dangerously-skip-permissions]`
-- **`CodexSessionLauncher`**: `codex resume <sessionRef> --model <model> --cd "<cwd>" [--dangerously-bypass-approvals-and-sandbox]`
+- **`CodexSessionLauncher`**: `codex resume <sessionRef> --model <model> --config model_reasoning_effort=<effort> --cd "<cwd>" [--dangerously-bypass-approvals-and-sandbox]`
   (flags verified directly against real `codex resume --help` output, not assumed)
 
 ## License

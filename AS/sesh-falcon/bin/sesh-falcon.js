@@ -15,6 +15,7 @@ function parseArgs(argv) {
     if (a === '--session') args.sessionRef = argv[++i];
     else if (a === '--cwd') args.cwd = argv[++i];
     else if (a === '--model') args.model = argv[++i];
+    else if (a === '--reasoning-effort') args.reasoningEffort = argv[++i];
     else if (a === '--skip-permissions') args.skipPermissions = true;
     else if (a === '--no-skip-permissions') args.skipPermissions = false;
     else if (a === '--harness') args.harness = argv[++i];
@@ -30,12 +31,14 @@ function printHelp() {
 
 Usage:
   sesh-falcon --session <id-or-path> --cwd <folder> --model <model> (--skip-permissions | --no-skip-permissions)
+              [--reasoning-effort <effort>]
               [--harness claude-code|codex] [--dry-run] [--json]
 
   --session             Session id or transcript path to resume (required)
   --cwd                 Working directory for the launched session (required)
   --model               Model to run at (required - see lib/session-launch.js for why this
                          is never optional on either harness)
+  --reasoning-effort    Codex reasoning effort (required for --harness codex)
   --skip-permissions    Launch with permission prompts bypassed (required: choose this or --no-skip-permissions)
   --no-skip-permissions Launch with normal permission prompting
   --harness             Target harness (default: claude-code)
@@ -60,6 +63,7 @@ async function main() {
       sessionRef: args.sessionRef,
       cwd: args.cwd,
       model: args.model,
+      reasoningEffort: args.reasoningEffort,
       skipPermissions: args.skipPermissions,
     });
   } catch (e) {
