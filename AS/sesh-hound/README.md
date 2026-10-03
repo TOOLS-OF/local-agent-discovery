@@ -16,10 +16,46 @@ npm install -g sesh-hound
 ```bash
 sesh-hound                       # sniff the current directory
 sesh-hound /path/to/some/project # sniff a specific folder
+sesh-hound .                     # compact terminal-friendly inventory
 sesh-hound . --json              # machine-readable output
+sesh-hound . --subagent          # only sessions with subagent evidence
+sesh-hound . --routes routes.json # merge a local, authoritative route map
 ```
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
+
+## Rancor Monster routeability view
+
+This branch adds a readable inventory row with display name, session ID, scope,
+route classification, parent route, compaction count, and last activity. It
+does **not** infer that every stored Codex session is a top-level chat: a local
+session record is historical evidence, not proof of an addressable endpoint.
+
+For authoritative identity and return routes, provide a local route map with
+`--routes`. The file is intentionally external to the repository so that
+private handles and local agent relationships are never published by accident:
+
+```json
+{
+  "routes": {
+    "session-id": {
+      "displayName": "optional display name",
+      "kind": "native-subagent",
+      "parent": "parent-session-or-handle",
+      "summon": "through-parent"
+    }
+  }
+}
+```
+
+Without an override, sesh-hound labels a Codex record only as a
+`subagent-candidate` when its own metadata contains parent/subagent evidence.
+Candidates still require verification through the parent or Codex app.
+
+The cache defaults to the platform cache directory (or can be supplied with
+`--cache <file>`). It keys records by path, size, and modification time. Codex
+compaction counts are updated by scanning only appended bytes when a rollout
+grows, rather than repeatedly reading the entire transcript.
 
 ## What it actually does
 

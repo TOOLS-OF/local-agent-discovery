@@ -1,7 +1,7 @@
 {
   "name": "sesh-hound",
-  "version": "1.0.0",
-  "description": "Sniff out every Claude Code, Codex, and VS Code Copilot Chat session spawned from a given folder — across Windows, macOS, and Linux.",
+  "version": "1.1.0-rancor-monster.0",
+  "description": "Discover local coding-agent sessions with routeability evidence, friendly terminal output, and incremental metadata caching.",
   "bin": {
     "sesh-hound": "./bin/sesh-hound.js"
   },
