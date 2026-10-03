@@ -42,7 +42,14 @@ private handles and local agent relationships are never published by accident:
       "displayName": "optional display name",
       "kind": "native-subagent",
       "parent": "parent-session-or-handle",
-      "summon": "through-parent"
+      "summon": "through-parent",
+      "children": [
+        {
+          "displayName": "known child",
+          "nativeHandle": "parent-only child handle",
+          "kind": "native-subagent"
+        }
+      ]
     }
   }
 }
