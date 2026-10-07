@@ -26,12 +26,28 @@
  *     dir holds the session *.jsonl files — NOT .json, a real gotcha.
  *
  * Usage:
- *   sesh-hound [cwd] [--json]
+ *   sesh-hound [cwd] [--json] [--config-dir <dir>...]
  *
  * [cwd] defaults to the current directory if omitted. Matched as an exact
  * string OR as a path prefix (pointing at a parent folder finds sessions
  * from subfolders too) — path separators and case are normalized before
  * comparing, so this works the same on Windows, macOS, and Linux.
+ *
+ * NOTE (added 2026-10-07): `CLAUDE_CONFIG_DIR` is a real, verified env var
+ * (tested empirically: `CLAUDE_CONFIG_DIR=/x claude mcp list` writes
+ * `.claude.json` AND relocates the entire `projects/` tree to `/x`, not
+ * just the top-level config file — confirmed via a real launched session
+ * landing its transcript under `/x/projects/<escaped-cwd>/*.jsonl` instead
+ * of `~/.claude/projects/...`). Before this fix, sesh-hound ONLY scanned
+ * `os.homedir()/.claude/projects` for Claude Code sessions — any session
+ * launched with a custom `CLAUDE_CONFIG_DIR` (the real mechanism this
+ * swarm's "housecat" per-account isolation uses) was INVISIBLE to it, a
+ * real blind spot, not just a missing metadata field. `--config-dir <dir>`
+ * (repeatable) now adds each given dir's own `projects/` subtree to the
+ * Claude Code scan alongside the default HOME. Each result's `configDir`
+ * field records which root it was found under (`"<home>"` for the
+ * default), so a housecat session is distinguishable from a default one
+ * without having to re-derive it from the file path by eye.
  */
 
 const fs = require('fs');
@@ -42,16 +58,34 @@ const HOME = os.homedir();
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const helpFlag = args.includes('--help') || args.includes('-h');
-const targetArg = args.find(a => !a.startsWith('-')) || process.cwd();
+
+const configDirs = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--config-dir') configDirs.push(args[++i]);
+}
+const positional = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--config-dir') { i++; continue; }
+  if (a.startsWith('-')) continue;
+  positional.push(a);
+}
+const targetArg = positional[0] || process.cwd();
 
 if (helpFlag) {
   console.log(`sesh-hound — sniff out Claude Code / Codex / VS Code Copilot sessions from a folder
 
 Usage:
-  sesh-hound [cwd] [--json]
+  sesh-hound [cwd] [--json] [--config-dir <dir>...]
 
-  [cwd]    Folder to search from. Defaults to the current directory.
-  --json   Print machine-readable JSON instead of the friendly report.
+  [cwd]          Folder to search from. Defaults to the current directory.
+  --json         Print machine-readable JSON instead of the friendly report.
+  --config-dir   Additional Claude Code config root to scan, equivalent to
+                 what CLAUDE_CONFIG_DIR would point a session at (repeatable).
+                 Real need: a session launched with CLAUDE_CONFIG_DIR set
+                 stores its ENTIRE transcript tree there, not under the
+                 default ~/.claude/projects/ — without this flag, any such
+                 session is invisible to sesh-hound, not just unlabeled.
 
 Matches the folder exactly, or as a path prefix — pointing at a parent
 folder also finds sessions from every subfolder underneath it.`);
@@ -77,8 +111,14 @@ function fileMTime(p) {
 const results = [];
 
 // ---------- Claude Code ----------
-function scanClaudeCode() {
-  const projectsDir = path.join(HOME, '.claude', 'projects');
+// Scans one Claude-Code-config-root's projects/ tree. `configDirLabel` is
+// "<home>" for the default os.homedir()-based root, or the actual
+// CLAUDE_CONFIG_DIR path for an additional root passed via --config-dir —
+// recorded on each result so a housecat session (isolated via a custom
+// CLAUDE_CONFIG_DIR) is distinguishable from a default-root session without
+// having to re-derive it from the file path.
+function scanClaudeCodeRoot(configRoot, configDirLabel) {
+  const projectsDir = path.join(configRoot, 'projects');
   if (!fs.existsSync(projectsDir)) return;
   for (const dir of fs.readdirSync(projectsDir)) {
     const dirPath = path.join(projectsDir, dir);
@@ -105,9 +145,17 @@ function scanClaudeCode() {
           cwd,
           file: fullPath,
           mtime: fileMTime(fullPath),
+          configDir: configDirLabel,
         });
       }
     }
+  }
+}
+
+function scanClaudeCode() {
+  scanClaudeCodeRoot(path.join(HOME, '.claude'), '<home>');
+  for (const dir of configDirs) {
+    scanClaudeCodeRoot(path.resolve(dir), dir);
   }
 }
 
@@ -224,6 +272,7 @@ if (jsonOut) {
     const mtimeStr = r.mtime ? r.mtime.toISOString() : 'unknown';
     console.log(`  [${r.tool}] ${r.sessionId}  (last active: ${mtimeStr})`);
     console.log(`      cwd:  ${r.cwd}`);
+    if (r.configDir && r.configDir !== '<home>') console.log(`      configDir: ${r.configDir}`);
     console.log(`      file: ${r.file}`);
   }
   console.log(`\n${results.length} session${results.length === 1 ? '' : 's'} found.`);
