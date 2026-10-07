@@ -1,0 +1,27 @@
+{
+  "name": "sesh-bee",
+  "version": "1.0.0",
+  "description": "Extract real dialogue turns from a Claude Code session JSONL and format as scannable markdown microfiche - slurp the dialogue, splat it to a readable archaeology artifact.",
+  "bin": {
+    "sesh-bee": "./bin/sesh-bee.mjs"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "keywords": [
+    "claude-code",
+    "cli",
+    "agent",
+    "sessions",
+    "swarm",
+    "archaeology",
+    "transcript"
+  ],
+  "license": "MIT",
+  "author": "DarienSirius"
+}

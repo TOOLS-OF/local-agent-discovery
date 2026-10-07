@@ -17,21 +17,41 @@ This tool is subclassed from `slurp-splat-microfiche.mjs`, a one-shot test scrip
 [Turn body text]
 ```
 
+## Install
+
+```bash
+npm install -g .          # from inside this folder
+```
+
 ## Usage
 
 ```bash
-node slurp-splat.mjs <path-to-session.jsonl> [output.md] [maxLines]
+sesh-bee --session <path-to-session.jsonl> [--output <path.md>] [--max-lines N]
 ```
 
-**Parameters:**
-- `path-to-session.jsonl`: Path to Claude Code session JSONL file
-- `output.md` (optional): Output markdown file path (default: `microfiche-output.md`)
-- `maxLines` (optional): Maximum lines to process from JSONL (default: entire file)
+**Flags:**
+- `--session` (required): path to the Claude Code session JSONL file. No
+  default — see "Fixed 2026-10-07" below for why.
+- `--output` (optional): output markdown file path (default: `./microfiche-output.md`)
+- `--max-lines` (optional): maximum lines to process from the JSONL (default: entire file)
 
 **Example:**
 ```bash
-node slurp-splat.mjs ~/.claude/projects/session-id.jsonl microfiche.md 50000
+sesh-bee --session ~/.claude/projects/session-id.jsonl --output microfiche.md --max-lines 50000
 ```
+
+## Fixed 2026-10-07: no more silent personal-path default
+
+The original version of this tool defaulted `--session` to one specific
+person's real session path when the argument was omitted — the exact
+"silent default" failure shape every other sesh-kingdom tool
+(`sesh-falcon`, `sesh-hound`, `sesh-nautilus`, `sesh-stork`) explicitly
+refuses: a caller who forgets the argument doesn't get an error, they
+silently slurp a *different* real session than the one they meant to.
+`--session` is now a required named flag with no fallback. This version
+also adds the standard `bin/`/`package.json` install shape the rest of the
+kingdom uses — the original shipped as a bare `.mjs` script with no `npm
+install -g` path at all.
 
 ## Output
 
