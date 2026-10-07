@@ -29,7 +29,7 @@
 // bug this replaced: $(cat file) shell substitution silently doesn't work
 // under execSync's default cmd.exe on Windows).
 const { execFileSync } = require('child_process');
-const { createSessionLauncher } = require('../../../lib/session-launch.js');
+const { createSessionLauncher, checkAndFixTrustDialog } = require('../../../lib/session-launch.js');
 
 function parseArgs(argv) {
   // --action defaults to 'resume' for backwards compatibility with callers
@@ -48,6 +48,7 @@ function parseArgs(argv) {
     else if (a === '--title') args.title = argv[++i];
     else if (a === '--agent') args.agent = argv[++i];
     else if (a === '--system-prompt-file') args.systemPromptFile = argv[++i];
+    else if (a === '--check-trust') args.checkTrust = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--json') args.json = true;
     else if (a === '--help' || a === '-h') args.help = true;
@@ -98,6 +99,15 @@ Usage:
                         For launching a named agent by name, prefer AS/sesh-name, which resolves
                         --agent (and --model, --title) from .claude/agents/<name>.md automatically.
   --harness             Target harness (default: claude-code)
+  --check-trust         Before launching, check (and if needed mechanistically fix) Claude
+                        Code's own first-launch trust-dialog state for --cwd in ~/.claude.json
+                        (projects[cwd].hasTrustDialogAccepted). Real incident this guards
+                        against: that dialog cannot reliably be navigated by any simulated
+                        keypress in a meta-harness like wmux — confirmed by watching a literal
+                        keystroke land on the OUTER shell prompt instead of the dialog itself.
+                        --dangerously-skip-permissions does NOT bypass it (a separate
+                        mechanism). Flipping the field directly is the only fix found that
+                        reliably works. Claude Code only.
   --dry-run             Print the command that would run, don't execute it
   --json                Print machine-readable output
 
@@ -105,7 +115,9 @@ There is deliberately no default for --model or the permission-mode flags —
 omitting them is an error, not a fallback, because the failure modes they
 prevent (a stalled compaction on an undersized default model, a stalled
 session on an unhandled permission prompt, a silently forked Codex thread,
-a wrongly attached-vs-resumed session) are worse than forcing the caller to decide.`);
+a wrongly attached-vs-resumed session) are worse than forcing the caller to
+decide. --check-trust is an optional extension, not required — most launches
+into an already-trusted --cwd need it only as a harmless no-op check.`);
 }
 
 async function main() {
@@ -114,6 +126,12 @@ async function main() {
 
   let launcher, built;
   try {
+    if (args.checkTrust) {
+      const trustResult = checkAndFixTrustDialog(args.cwd);
+      if (trustResult.changed) {
+        console.log(`sesh-falcon: trust dialog for "${args.cwd}" was not accepted (hasTrustDialogAccepted: ${trustResult.before}) — fixed mechanistically, now ${trustResult.after}.`);
+      }
+    }
     launcher = createSessionLauncher(args.harness);
     built = launcher.buildLaunchCommand({
       action: args.action,
