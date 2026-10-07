@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+// sesh-bee.mjs is a real ES module (uses import), so it cannot be loaded
+// with require() the way the other sesh-kingdom tools' CJS bin shims load
+// their .js implementation - require() on a .mjs file throws
+// ERR_REQUIRE_ESM. Dynamic import() is valid at the top level of a CJS
+// script (unlike static `import ... from`), so that's the correct bridge
+// here, not a rewrite of sesh-bee.mjs into CJS.
+import('./sesh-bee.mjs');
