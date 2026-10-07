@@ -23,6 +23,16 @@ working rather than like a launch mistake:
   thread. Messages sent into that CLI fork never appear in the GUI the user
   is actually watching, and never reach that thread's own next compaction
   summary — silent data loss, not a cosmetic mismatch.
+- **An `--agent` name that sounds right but isn't:** Claude Code does not
+  error on an invalid `--agent` value — it silently launches as something
+  other than the intended agent. Real incident: a relaunch used
+  `--agent hazrat-rabbit-pineapple`, a plausible identity-description label
+  with no real spec file behind it, and nothing failed loudly.
+- **A first-launch trust dialog that can't be driven from a meta-harness:**
+  Claude Code's "Quick safety check" TUI, on first launch in a new `--cwd`,
+  could not be navigated by any simulated keypress from inside wmux — a
+  literal character landed on the OUTER shell prompt instead of reaching
+  the dialog, proving the input never got there at all.
 
 ## Install
 
@@ -35,12 +45,28 @@ npm install -g .          # from inside this folder
 ```bash
 sesh-falcon --session <id-or-path> --cwd <folder> --model <model> \
             (--skip-permissions | --no-skip-permissions) \
-            [--harness claude-code|codex] [--dry-run] [--json]
+            [--harness claude-code|codex] [--agent <name>] [--check-trust] \
+            [--dry-run] [--json]
 ```
 
 There is deliberately no default for `--model` or the permission-mode
-flags. Omitting them is an error, not a fallback — the three failure modes
+flags. Omitting them is an error, not a fallback — the failure modes
 above are worse than forcing the caller to decide every time.
+
+`--agent` and `--check-trust` are optional extensions (Claude Code only) —
+most launches need neither:
+
+- **`--agent <name>`**: validates `<cwd>/.claude/agents/<name>.md` is a real
+  file on disk before appending `--agent <name>` to the launch command.
+  Refuses with the real list of candidate agent files found in that folder
+  if the name doesn't match one — never launches with an unverified
+  identity.
+- **`--check-trust`**: before building the launch command, reads (and if
+  needed, mechanistically fixes) `~/.claude.json`'s
+  `projects["<cwd>"].hasTrustDialogAccepted` for the target `--cwd`. This is
+  a direct, non-interactive fix for a dialog that cannot be reliably driven
+  by simulated keypresses from a meta-harness — it edits only that one
+  boolean field, nothing else in the file.
 
 ## What it actually does
 

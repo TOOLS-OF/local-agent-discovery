@@ -6,7 +6,7 @@
 // either - it stalls on the first prompt, or the first compaction, with no
 // one watching.
 const { execSync } = require('child_process');
-const { createSessionLauncher } = require('../../../lib/session-launch.js');
+const { createSessionLauncher, checkAndFixTrustDialog } = require('../../../lib/session-launch.js');
 
 function parseArgs(argv) {
   const args = { harness: 'claude-code', dryRun: false };
@@ -18,6 +18,8 @@ function parseArgs(argv) {
     else if (a === '--skip-permissions') args.skipPermissions = true;
     else if (a === '--no-skip-permissions') args.skipPermissions = false;
     else if (a === '--harness') args.harness = argv[++i];
+    else if (a === '--agent') args.agentName = argv[++i];
+    else if (a === '--check-trust') args.checkTrust = true;
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--json') args.json = true;
     else if (a === '--help' || a === '-h') args.help = true;
@@ -39,6 +41,21 @@ Usage:
   --skip-permissions    Launch with permission prompts bypassed (required: choose this or --no-skip-permissions)
   --no-skip-permissions Launch with normal permission prompting
   --harness             Target harness (default: claude-code)
+  --agent               Named agent spec to launch as (Claude Code only; optional).
+                         Validated against a REAL <cwd>/.claude/agents/<name>.md on disk
+                         before launch — refuses with the real candidate list if it does
+                         not exist. Real incident this guards against: a relaunch used
+                         --agent hazrat-rabbit-pineapple, a plausible-sounding name with
+                         no real spec file, and Claude Code did not error — it just
+                         silently was not the intended agent.
+  --check-trust         Before launching, check (and if needed mechanistically fix)
+                         Claude Code's own first-launch trust-dialog state for --cwd in
+                         ~/.claude.json (projects[cwd].hasTrustDialogAccepted). Real
+                         incident this guards against: that dialog cannot reliably be
+                         navigated by any simulated keypress in a meta-harness like wmux —
+                         confirmed by watching a literal keystroke land on the OUTER shell
+                         prompt instead of the dialog. Flipping the field directly is the
+                         only mechanism found that reliably works.
   --dry-run             Print the command that would run, don't execute it
   --json                Print machine-readable output
 
@@ -46,7 +63,8 @@ There is deliberately no default for --model or the permission-mode flags -
 omitting them is an error, not a fallback, because the failure modes they
 prevent (a stalled compaction on an undersized default model, a stalled
 session on an unhandled permission prompt, a silently forked Codex thread)
-are worse than forcing the caller to decide.`);
+are worse than forcing the caller to decide. --agent and --check-trust are
+optional extensions, not required - most launches need neither.`);
 }
 
 async function main() {
@@ -55,12 +73,19 @@ async function main() {
 
   let launcher, built;
   try {
+    if (args.checkTrust) {
+      const trustResult = checkAndFixTrustDialog(args.cwd);
+      if (trustResult.changed) {
+        console.log(`sesh-falcon: trust dialog for "${args.cwd}" was not accepted (hasTrustDialogAccepted: ${trustResult.before}) — fixed mechanistically, now ${trustResult.after}.`);
+      }
+    }
     launcher = createSessionLauncher(args.harness);
     built = launcher.buildLaunchCommand({
       sessionRef: args.sessionRef,
       cwd: args.cwd,
       model: args.model,
       skipPermissions: args.skipPermissions,
+      agentName: args.agentName,
     });
   } catch (e) {
     console.error('sesh-falcon error:', e.message);
