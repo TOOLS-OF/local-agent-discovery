@@ -17,9 +17,24 @@ npm install -g sesh-hound
 sesh-hound                       # sniff the current directory
 sesh-hound /path/to/some/project # sniff a specific folder
 sesh-hound . --json              # machine-readable output
+sesh-hound . --config-dir /path/to/other/claude/config  # also scan a CLAUDE_CONFIG_DIR root
 ```
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
+
+### `--config-dir` — a real blind spot, not a cosmetic option
+
+`CLAUDE_CONFIG_DIR` is a real Claude Code env var (verified empirically,
+2026-10-07: `CLAUDE_CONFIG_DIR=/x claude mcp list` writes `.claude.json`
+there AND relocates the entire `projects/` tree to `/x/projects/...`, not
+just the top-level config file). Any session launched with a custom
+`CLAUDE_CONFIG_DIR` — the mechanism this swarm's per-account "housecat"
+isolation uses — stores its transcript entirely outside the default
+`~/.claude/projects/`, so without `--config-dir` sesh-hound would never
+find it at all, not just fail to label it. Pass `--config-dir <dir>`
+(repeatable) for every additional config root you want scanned alongside
+the default; each matching result's `configDir` field records which root
+it came from (`"<home>"` for the default).
 
 ## What it actually does
 
