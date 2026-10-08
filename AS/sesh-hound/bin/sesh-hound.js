@@ -179,9 +179,23 @@ function scanClaudeCodeRoot(configRoot, configDirLabel) {
       let cwd = null;
       let title = null;
       try {
-        // Only need to find one cwd field — read the first 8KB, which is
-        // plenty since Claude Code stamps cwd on nearly every event.
-        const buf = fs.readFileSync(fullPath, { encoding: 'utf8', flag: 'r' }).slice(0, 8000);
+        // NOTE (found + fixed 2026-10-08, real measurement on a real
+        // machine): this used to be `fs.readFileSync(fullPath,
+        // {encoding:'utf8'}).slice(0, 8000)` - reading and UTF-8-decoding
+        // the ENTIRE file before slicing. Real Claude Code session files on
+        // this machine run 30-280MB (confirmed: one live session file was
+        // 281,640,104 bytes). Reading full file content just to look at the
+        // first 8KB was the dominant cost of a default sesh-hound run -
+        // measured 16.3s for Claude Code alone vs. 0.8s for Codex (already
+        // fixed) and 0.3s for VS Code Copilot. Switched to a bounded
+        // fs.openSync/readSync read (same technique the Codex file-walk
+        // fallback already used below) - only the first 8KB is ever read
+        // off disk, regardless of file size.
+        const fh = fs.openSync(fullPath, 'r');
+        const rawBuf = Buffer.alloc(8000);
+        const bytesRead = fs.readSync(fh, rawBuf, 0, 8000, 0);
+        fs.closeSync(fh);
+        const buf = rawBuf.slice(0, bytesRead).toString('utf8');
         const m = buf.match(/"cwd":"([^"]*)"/);
         if (m) cwd = m[1].replace(/\\\\/g, '\\');
         const slugM = buf.match(/"slug":"([^"]*)"/);
@@ -246,6 +260,45 @@ function resolveSqlite3() {
   return _sqlite3Path;
 }
 
+// A SECOND real, separate Codex-local database exists on some real installs:
+// ~/.codex/sqlite/codex-dev.db's `local_thread_catalog` table, with a real
+// `display_title` column holding the genuine human-assigned/UI-shown thread
+// title (confirmed on a real machine: for one thread this returned the
+// agent's actual full real identity string, far better than state_5.sqlite's
+// bare `agent_nickname`/raw-first-message `title`). It is NOT comprehensive
+// (confirmed: 43 total rows machine-wide vs. state_5.sqlite's hundreds, and
+// only 3 of 43 real sessions for one tested folder) - a curated/opt-in
+// catalog, not every session. Used here as a title ENRICHMENT pass only:
+// query by the already-matched thread ids from the real state_5.sqlite scan,
+// overlay display_title where this catalog has a better one, never as the
+// primary source (it would silently miss most real sessions on its own).
+function enrichTitlesFromCatalog(idsNeedingTitles) {
+  if (!idsNeedingTitles.length) return new Map();
+  const dbPath = path.join(HOME, '.codex', 'sqlite', 'codex-dev.db');
+  if (!fs.existsSync(dbPath)) return new Map();
+  const sqlite3Exe = resolveSqlite3();
+  if (!sqlite3Exe) return new Map();
+  let out;
+  try {
+    const idList = idsNeedingTitles.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+    out = execFileSync(sqlite3Exe, ['-json', dbPath], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 10000,
+      input: `SELECT thread_id, display_title FROM local_thread_catalog WHERE thread_id IN (${idList}) AND missing_candidate = 0;`,
+    });
+  } catch (e) {
+    return new Map(); // locked, missing table, etc. - enrichment is optional, never fail the whole scan for it
+  }
+  const map = new Map();
+  try {
+    for (const row of JSON.parse(out || '[]')) {
+      if (row.thread_id && row.display_title) map.set(row.thread_id, row.display_title);
+    }
+  } catch (e) { /* malformed output - skip enrichment, not fatal */ }
+  return map;
+}
+
 function scanCodexViaSqlite() {
   const dbPath = path.join(HOME, '.codex', 'state_5.sqlite');
   if (!fs.existsSync(dbPath)) return null;
@@ -277,13 +330,19 @@ function scanCodexViaSqlite() {
   } catch (e) {
     return null; // unexpected output shape - fall back rather than guess
   }
-  let matched = 0;
+  const matchedRows = [];
   for (const row of rows) {
     if (!row.id || !row.cwd) continue;
     if (!matches(row.cwd)) continue;
-    matched++;
+    matchedRows.push(row);
+  }
+  // Enrichment pass: ask codex-dev.db for a better display_title for every
+  // matched id in one batched query, not one query per row.
+  const catalogTitles = enrichTitlesFromCatalog(matchedRows.map(r => r.id));
+  for (const row of matchedRows) {
     const nickname = row.agent_nickname && String(row.agent_nickname).trim();
-    const displayTitle = nickname || row.title || null;
+    const catalogTitle = catalogTitles.get(row.id);
+    const displayTitle = catalogTitle || nickname || row.title || null;
     results.push({
       tool: 'codex',
       sessionId: row.id,
@@ -295,7 +354,7 @@ function scanCodexViaSqlite() {
       source: 'sqlite',
     });
   }
-  return matched; // count, so the caller can log how many this path found
+  return matchedRows.length; // count, so the caller can log how many this path found
 }
 
 // Slow path: the original recursive rollout-file walk. Kept as the real
