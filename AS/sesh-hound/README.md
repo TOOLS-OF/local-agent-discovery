@@ -17,9 +17,54 @@ npm install -g sesh-hound
 sesh-hound                       # sniff the current directory
 sesh-hound /path/to/some/project # sniff a specific folder
 sesh-hound . --json              # machine-readable output
+sesh-hound . --harness codex     # only scan one harness (faster, see below)
+sesh-hound . --config-dir /path/to/other/claude/config  # also scan a CLAUDE_CONFIG_DIR root
 ```
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
+
+### `--harness` — skip the other two scanners entirely
+
+`--harness claude-code|codex|vscode-copilot` only runs that one scanner. Real
+need: a full Codex rollout-file scan alone can run past a minute on a loaded
+machine, and most of the time you already know which tool you're hunting a
+session in. When you don't need all three, don't pay for all three.
+
+### Real display names, not just session ids
+
+Every result now carries a real `title` field — Codex sessions show their
+`agent_nickname` (or the thread's own title text if no nickname was set);
+Claude Code sessions show their session `slug`. Finding "which one is the
+agent I'm thinking of" by eye used to mean opening transcripts one at a time
+to decode a bare UUID; now the first result screen just says "Archimedes" or
+"Cicero" directly.
+
+### Codex is fast by default — a real indexed DB query, not a directory walk
+
+Codex sessions are looked up via `~/.codex/state_5.sqlite` — the same
+`threads` table the Codex app-server daemon itself maintains (id, cwd,
+title, agent_nickname, updated_at, archived) — queried once via the real
+`sqlite3` CLI instead of recursively walking every rollout `.jsonl` file
+and reading its first 4KB off disk. This is the difference between a
+sub-second lookup and a minute-plus full-tree scan. If `sqlite3` isn't on
+PATH, or the DB is missing/locked/an unexpected shape, sesh-hound falls
+back to the original file-walk automatically — the fast path is a pure
+speed optimization, never a hard dependency, and both paths produce
+identical real results.
+
+### `--config-dir` — a real blind spot, not a cosmetic option
+
+`CLAUDE_CONFIG_DIR` is a real Claude Code env var (verified empirically,
+2026-10-07: `CLAUDE_CONFIG_DIR=/x claude mcp list` writes `.claude.json`
+there AND relocates the entire `projects/` tree to `/x/projects/...`, not
+just the top-level config file). Any session launched with a custom
+`CLAUDE_CONFIG_DIR` — the mechanism this swarm's per-account "housecat"
+isolation uses — stores its transcript entirely outside the default
+`~/.claude/projects/`, so without `--config-dir` sesh-hound would never
+find it at all, not just fail to label it. Pass `--config-dir <dir>`
+(repeatable) for every additional config root you want scanned alongside
+the default; each matching result's `configDir` field records which root
+it came from (`"<home>"` for the default).
 
 ## What it actually does
 

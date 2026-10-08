@@ -25,41 +25,116 @@
  *     file (strip via dirname if so). Matching hash's sibling chatSessions/
  *     dir holds the session *.jsonl files — NOT .json, a real gotcha.
  *
+ * NOTE (added 2026-10-08, real incident): searching all three harnesses for
+ * a single-harness question wastes real time — a full-tree Codex rollout
+ * scan can run past a minute on a loaded machine. `--harness <name>` now
+ * skips the other two scanners entirely. Codex also gained a fast path:
+ * `~/.codex/state_5.sqlite`'s own `threads` table (id, cwd, title,
+ * agent_nickname, updated_at, archived) is queried directly via the `sqlite3`
+ * CLI when available — one indexed query instead of a recursive directory
+ * walk reading every rollout `.jsonl` file's first 4KB. Falls back to the
+ * old file-walk automatically if `sqlite3` isn't on PATH or the DB doesn't
+ * exist, so this never becomes a hard dependency. Every result now also
+ * carries a real display `title` (Codex: `agent_nickname` or the thread's
+ * own `title`, truncated; Claude Code: the session's `slug`, same
+ * extraction `sesh-hound-extended.js` already used) instead of forcing a
+ * human to go look up what a bare UUID actually is.
+ *
  * Usage:
- *   sesh-hound [cwd] [--json]
+ *   sesh-hound [cwd] [--json] [--config-dir <dir>...] [--harness <name>]
  *
  * [cwd] defaults to the current directory if omitted. Matched as an exact
  * string OR as a path prefix (pointing at a parent folder finds sessions
  * from subfolders too) — path separators and case are normalized before
  * comparing, so this works the same on Windows, macOS, and Linux.
+ *
+ * NOTE (added 2026-10-07): `CLAUDE_CONFIG_DIR` is a real, verified env var
+ * (tested empirically: `CLAUDE_CONFIG_DIR=/x claude mcp list` writes
+ * `.claude.json` AND relocates the entire `projects/` tree to `/x`, not
+ * just the top-level config file — confirmed via a real launched session
+ * landing its transcript under `/x/projects/<escaped-cwd>/*.jsonl` instead
+ * of `~/.claude/projects/...`). Before this fix, sesh-hound ONLY scanned
+ * `os.homedir()/.claude/projects` for Claude Code sessions — any session
+ * launched with a custom `CLAUDE_CONFIG_DIR` (the real mechanism this
+ * swarm's "housecat" per-account isolation uses) was INVISIBLE to it, a
+ * real blind spot, not just a missing metadata field. `--config-dir <dir>`
+ * (repeatable) now adds each given dir's own `projects/` subtree to the
+ * Claude Code scan alongside the default HOME. Each result's `configDir`
+ * field records which root it was found under (`"<home>"` for the
+ * default), so a housecat session is distinguishable from a default one
+ * without having to re-derive it from the file path by eye.
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execFileSync, execSync } = require('child_process');
 
 const HOME = os.homedir();
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const helpFlag = args.includes('--help') || args.includes('-h');
-const targetArg = args.find(a => !a.startsWith('-')) || process.cwd();
+
+const configDirs = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--config-dir') configDirs.push(args[++i]);
+}
+let harnessFilter = null;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--harness') harnessFilter = (args[++i] || '').toLowerCase();
+}
+const VALID_HARNESSES = ['claude-code', 'codex', 'vscode-copilot'];
+if (harnessFilter && !VALID_HARNESSES.includes(harnessFilter)) {
+  console.error(`sesh-hound error: --harness must be one of ${VALID_HARNESSES.join(', ')}, got "${harnessFilter}"`);
+  process.exit(1);
+}
+const positional = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--config-dir' || a === '--harness') { i++; continue; }
+  if (a.startsWith('-')) continue;
+  positional.push(a);
+}
+const targetArg = positional[0] || process.cwd();
 
 if (helpFlag) {
   console.log(`sesh-hound — sniff out Claude Code / Codex / VS Code Copilot sessions from a folder
 
 Usage:
-  sesh-hound [cwd] [--json]
+  sesh-hound [cwd] [--json] [--config-dir <dir>...] [--harness <name>]
 
-  [cwd]    Folder to search from. Defaults to the current directory.
-  --json   Print machine-readable JSON instead of the friendly report.
+  [cwd]          Folder to search from. Defaults to the current directory.
+  --json         Print machine-readable JSON instead of the friendly report.
+  --config-dir   Additional Claude Code config root to scan, equivalent to
+                 what CLAUDE_CONFIG_DIR would point a session at (repeatable).
+                 Real need: a session launched with CLAUDE_CONFIG_DIR set
+                 stores its ENTIRE transcript tree there, not under the
+                 default ~/.claude/projects/ — without this flag, any such
+                 session is invisible to sesh-hound, not just unlabeled.
+  --harness      Only scan one harness: "claude-code", "codex", or
+                 "vscode-copilot". Skips the other two scanners entirely —
+                 real time saver when you already know which tool you're
+                 looking for; a full Codex rollout-file scan alone can run
+                 past a minute on a loaded machine.
 
 Matches the folder exactly, or as a path prefix — pointing at a parent
-folder also finds sessions from every subfolder underneath it.`);
+folder also finds sessions from every subfolder underneath it.
+
+Every result's "title" field is a real display name, not just its session
+id: Codex uses its agent_nickname (or thread title) from state_5.sqlite;
+Claude Code uses the session's own slug.`);
   process.exit(0);
 }
 
 function normalize(p) {
-  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  // NOTE (found 2026-10-08): some Codex thread cwd values in state_5.sqlite
+  // carry a Windows long-path prefix (`\\?\C:\...`), confirmed via a real
+  // query against the live DB - without stripping it, those threads would
+  // never match a plain `C:\...` target even when the real folder is
+  // identical. Strip \\?\ (and the rarer \\?\UNC\ form) before any other
+  // normalization.
+  let s = p.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
+  return s.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
 const target = normalize(path.resolve(targetArg));
@@ -74,11 +149,22 @@ function fileMTime(p) {
   try { return fs.statSync(p).mtime; } catch { return null; }
 }
 
+function truncate(s, n) {
+  if (!s) return s;
+  const oneLine = String(s).replace(/\s+/g, ' ').trim();
+  return oneLine.length > n ? oneLine.slice(0, n - 1) + '…' : oneLine;
+}
+
 const results = [];
 
 // ---------- Claude Code ----------
-function scanClaudeCode() {
-  const projectsDir = path.join(HOME, '.claude', 'projects');
+// Scans one Claude-Code-config-root's projects/ tree. `configDirLabel` is
+// "<home>" for the default os.homedir()-based root, or the actual
+// CLAUDE_CONFIG_DIR path for an additional root passed via --config-dir —
+// recorded on each result so a housecat session (isolated via a custom
+// CLAUDE_CONFIG_DIR) is distinguishable from a default-root session.
+function scanClaudeCodeRoot(configRoot, configDirLabel) {
+  const projectsDir = path.join(configRoot, 'projects');
   if (!fs.existsSync(projectsDir)) return;
   for (const dir of fs.readdirSync(projectsDir)) {
     const dirPath = path.join(projectsDir, dir);
@@ -91,28 +177,131 @@ function scanClaudeCode() {
       if (!f.endsWith('.jsonl')) continue;
       const fullPath = path.join(dirPath, f);
       let cwd = null;
+      let title = null;
       try {
         // Only need to find one cwd field — read the first 8KB, which is
         // plenty since Claude Code stamps cwd on nearly every event.
         const buf = fs.readFileSync(fullPath, { encoding: 'utf8', flag: 'r' }).slice(0, 8000);
         const m = buf.match(/"cwd":"([^"]*)"/);
         if (m) cwd = m[1].replace(/\\\\/g, '\\');
+        const slugM = buf.match(/"slug":"([^"]*)"/);
+        if (slugM) title = slugM[1];
       } catch { continue; }
       if (matches(cwd)) {
         results.push({
           tool: 'claude-code',
           sessionId: f.replace(/\.jsonl$/, ''),
+          title: title ? truncate(title, 70) : null,
           cwd,
           file: fullPath,
           mtime: fileMTime(fullPath),
+          configDir: configDirLabel,
         });
       }
     }
   }
 }
 
+function scanClaudeCode() {
+  scanClaudeCodeRoot(path.join(HOME, '.claude'), '<home>');
+  for (const dir of configDirs) {
+    scanClaudeCodeRoot(path.resolve(dir), dir);
+  }
+}
+
 // ---------- Codex ----------
-function scanCodex() {
+// Fast path: query ~/.codex/state_5.sqlite's own `threads` table directly
+// (id, cwd, title, agent_nickname, updated_at, archived) via the `sqlite3`
+// CLI — one indexed query against a table the Codex app-server daemon
+// already maintains, instead of a recursive walk reading every rollout
+// .jsonl file's first 4KB off disk. cwd matching stays in JS (same
+// `matches()` used everywhere else) since the prefix-or-parent logic isn't
+// a simple SQL LIKE in both directions; the DB read itself is the real
+// time saved. Returns null (not []) on any failure so the caller can fall
+// back cleanly — a `null` means "didn't work," not "found nothing."
+// Resolves the real absolute path to the sqlite3 executable once. Plain
+// `execFileSync('sqlite3', ...)` throws ENOENT on Windows for some real
+// installs (confirmed: a WinGet-Links-shim install where `where sqlite3`
+// resolves fine via cmd.exe's own PATH search, but Node's CreateProcess
+// call without a shell does not find it the same way) even though the
+// executable genuinely exists and is directly invocable once you have its
+// real path. Resolving via `where` (Windows) / `command -v` (else) once
+// and calling THAT absolute path directly avoids needing `shell: true` at
+// all for the real sqlite3 invocation - no shell-escaping caveats, no
+// deprecation warning, same reliability.
+let _sqlite3Path;
+function resolveSqlite3() {
+  if (_sqlite3Path !== undefined) return _sqlite3Path;
+  try {
+    // A plain fixed string through execSync (not an args array through
+    // execFileSync+shell:true) avoids Node's args-array-with-shell
+    // deprecation warning entirely - "sqlite3" here is a hardcoded
+    // literal, never interpolated input, so a plain shell string is safe.
+    const cmd = process.platform === 'win32' ? 'where sqlite3' : 'command -v sqlite3';
+    const out = execSync(cmd, { encoding: 'utf8' }).trim();
+    _sqlite3Path = out.split('\n')[0].trim() || null;
+  } catch (e) {
+    _sqlite3Path = null;
+  }
+  return _sqlite3Path;
+}
+
+function scanCodexViaSqlite() {
+  const dbPath = path.join(HOME, '.codex', 'state_5.sqlite');
+  if (!fs.existsSync(dbPath)) return null;
+  const sqlite3Exe = resolveSqlite3();
+  if (!sqlite3Exe) return null; // sqlite3 not installed/not on PATH - fall back
+  let out;
+  try {
+    // NOTE (found + fixed 2026-10-08, real debugging on a real machine, not
+    // assumed): passing the SQL string AND a custom `-separator '\x1f'` as
+    // CLI argv elements through a shell (an earlier, now-removed fix for
+    // the ENOENT issue above) silently mangled the non-printable separator
+    // character and/or the semicolon-terminated SQL string - confirmed via
+    // "Error: in prepare, incomplete input" on a real run. Fixed by moving
+    // the SQL to stdin (`input:` option - never touches argv/shell quoting
+    // at all) and using `-json` output instead of any custom separator,
+    // which sidesteps character-escaping entirely by producing real JSON.
+    out = execFileSync(sqlite3Exe, ['-json', dbPath], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 15000,
+      input: 'SELECT id, cwd, title, agent_nickname, updated_at, archived FROM threads;',
+    });
+  } catch (e) {
+    return null; // DB locked, schema changed, etc. - fall back
+  }
+  let rows;
+  try {
+    rows = JSON.parse(out || '[]');
+  } catch (e) {
+    return null; // unexpected output shape - fall back rather than guess
+  }
+  let matched = 0;
+  for (const row of rows) {
+    if (!row.id || !row.cwd) continue;
+    if (!matches(row.cwd)) continue;
+    matched++;
+    const nickname = row.agent_nickname && String(row.agent_nickname).trim();
+    const displayTitle = nickname || row.title || null;
+    results.push({
+      tool: 'codex',
+      sessionId: row.id,
+      title: displayTitle ? truncate(displayTitle, 70) : null,
+      cwd: row.cwd,
+      file: null, // sqlite fast path doesn't resolve the rollout file path - id is the real key
+      mtime: row.updated_at ? new Date(Number(row.updated_at) * 1000) : null,
+      archived: row.archived === 1 || row.archived === '1',
+      source: 'sqlite',
+    });
+  }
+  return matched; // count, so the caller can log how many this path found
+}
+
+// Slow path: the original recursive rollout-file walk. Kept as the real
+// fallback for when sqlite3 isn't available - never the only path, since
+// not every machine running this tool will have the sqlite3 CLI installed.
+function scanCodexViaFileWalk() {
   const sessionsDir = path.join(HOME, '.codex', 'sessions');
   if (!fs.existsSync(sessionsDir)) return;
   function walk(dir) {
@@ -123,6 +312,7 @@ function scanCodex() {
       if (e.isDirectory()) walk(full);
       else if (e.name.endsWith('.jsonl')) {
         let cwd = null;
+        let title = null;
         const nameMatch = e.name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
         const sessionId = nameMatch ? nameMatch[1] : e.name.replace(/\.jsonl$/, '');
         try {
@@ -138,15 +328,25 @@ function scanCodex() {
           results.push({
             tool: 'codex',
             sessionId: sessionId || path.basename(full),
+            title: null, // file-walk path doesn't have a cheap source for this - sqlite path does
             cwd,
             file: full,
             mtime: fileMTime(full),
+            source: 'file-walk',
           });
         }
       }
     }
   }
   walk(sessionsDir);
+}
+
+function scanCodex() {
+  const sqliteMatched = scanCodexViaSqlite();
+  if (sqliteMatched === null && !jsonOut) {
+    console.error('  (sqlite3 CLI unavailable or state_5.sqlite missing — falling back to a full rollout-file scan, slower)');
+  }
+  if (sqliteMatched === null) scanCodexViaFileWalk();
 }
 
 // ---------- VS Code Copilot Chat (Code + Code - Insiders, any OS) ----------
@@ -198,6 +398,7 @@ function scanVSCodeCopilot() {
         results.push({
           tool: `vscode-copilot (${variant})`,
           sessionId: f.replace(/\.jsonl?$/, ''),
+          title: null,
           cwd: folderPath,
           file: full,
           mtime: fileMTime(full),
@@ -207,24 +408,27 @@ function scanVSCodeCopilot() {
   }
 }
 
-scanClaudeCode();
-scanCodex();
-scanVSCodeCopilot();
+if (!harnessFilter || harnessFilter === 'claude-code') scanClaudeCode();
+if (!harnessFilter || harnessFilter === 'codex') scanCodex();
+if (!harnessFilter || harnessFilter === 'vscode-copilot') scanVSCodeCopilot();
 
 results.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
 
 if (jsonOut) {
   console.log(JSON.stringify(results, null, 2));
 } else {
-  console.log(`🐕 sesh-hound sniffing: ${targetArg}\n`);
+  console.log(`🐕 sesh-hound sniffing: ${targetArg}${harnessFilter ? ` (harness: ${harnessFilter})` : ''}\n`);
   if (results.length === 0) {
     console.log('  Nothing here — no scent trail from this folder.');
   }
   for (const r of results) {
     const mtimeStr = r.mtime ? r.mtime.toISOString() : 'unknown';
-    console.log(`  [${r.tool}] ${r.sessionId}  (last active: ${mtimeStr})`);
+    const titleStr = r.title ? ` — "${r.title}"` : '';
+    console.log(`  [${r.tool}] ${r.sessionId}${titleStr}  (last active: ${mtimeStr})`);
     console.log(`      cwd:  ${r.cwd}`);
-    console.log(`      file: ${r.file}`);
+    if (r.configDir && r.configDir !== '<home>') console.log(`      configDir: ${r.configDir}`);
+    if (r.archived) console.log(`      archived: yes`);
+    if (r.file) console.log(`      file: ${r.file}`);
   }
   console.log(`\n${results.length} session${results.length === 1 ? '' : 's'} found.`);
 }
