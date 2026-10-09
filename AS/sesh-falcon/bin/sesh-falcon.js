@@ -81,10 +81,31 @@ function resolveConfigDir(agentProfile, cwd, explicitConfigDir, agentsDir) {
   if (!agentProfile) return null;
 
   const fm = readAgentFrontmatter(agentProfile, cwd, agentsDir);
-  const strategy = fm ? fm.config_dir : null;
+
+  if (fm === null) {
+    // Named --agent but no .md found anywhere in the search path. Rather than
+    // silently proceeding without isolation (which would reproduce the exact
+    // qlippoth scenario this tool was built to prevent, for the case most likely
+    // to happen by accident — a typo'd or missing agent name), hard-error and
+    // tell the caller where we looked.
+    const searchDirs = agentsDir
+      ? [agentsDir]
+      : [
+          path.join(os.homedir(), '.claude', 'agents'),
+          path.join(cwd, '.claude', 'agents'),
+        ];
+    throw new Error(
+      `sesh-falcon: agent profile "${agentProfile}" not found.\n` +
+      `Searched:\n${searchDirs.map(d => `  ${path.join(d, agentProfile + '.md')}`).join('\n')}\n\n` +
+      `If this agent has no .md definition, pass --config-dir explicitly (or omit --agent).\n` +
+      `Use --agents-dir to point to a different search directory.`
+    );
+  }
+
+  const strategy = fm.config_dir;
 
   if (!strategy || strategy === 'shared') {
-    // No isolation required for this agent class.
+    // Agent .md found, but no config_dir key declared → shared/no-isolation by design.
     return null;
   }
 
