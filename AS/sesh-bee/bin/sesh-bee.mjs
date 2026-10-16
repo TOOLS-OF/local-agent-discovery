@@ -90,10 +90,56 @@ function splatToMarkdown(turns, options = {}) {
   return md;
 }
 
+// NOTE (fixed 2026-10-07): the original version of this tool defaulted
+// --session to a specific person's real session path
+// (C:\Users\victorb\...\e4044d15-....jsonl) when the argument was omitted.
+// That's the exact "silent default" failure shape the rest of this toolkit
+// (sesh-falcon, sesh-hound, sesh-nautilus, sesh-stork) explicitly refuses to
+// allow: a caller who forgets the argument doesn't get an error, they
+// silently slurp a DIFFERENT real session than the one they meant to. Now
+// --session/--output are explicit named flags; --session is required, with
+// no fallback to anyone's personal path.
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--session') args.sessionPath = argv[++i];
+    else if (a === '--output') args.outputPath = argv[++i];
+    else if (a === '--max-lines') args.maxLines = parseInt(argv[++i], 10);
+    else if (a === '--help' || a === '-h') args.help = true;
+  }
+  return args;
+}
+
+function printHelp() {
+  console.log(`sesh-bee (slurp-splat) — extract real dialogue turns from a Claude Code
+session JSONL and format as scannable markdown microfiche.
+
+Usage:
+  sesh-bee --session <path-to-session.jsonl> [--output <path.md>] [--max-lines N]
+
+  --session     Path to the Claude Code session JSONL file (required — no
+                default; omitting it is an error, not a fallback to any
+                particular prior session).
+  --output      Output markdown file path (default: ./microfiche-output.md)
+  --max-lines   Maximum lines to process from the JSONL (default: entire file)
+
+Example:
+  sesh-bee --session ~/.claude/projects/<slug>/<session-id>.jsonl --output microfiche.md --max-lines 50000`);
+}
+
 async function main() {
-  const jsonlPath = process.argv[2] || 'C:\\Users\\victorb\\.claude\\projects\\C--Users-victorb\\e4044d15-130d-4593-9ad8-d37a48525f5f.jsonl';
-  const outputPath = process.argv[3] || './microfiche-output.md';
-  const maxLines = process.argv[4] ? parseInt(process.argv[4]) : null;
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) { printHelp(); return; }
+  if (!args.sessionPath) {
+    console.error('sesh-bee error: --session is required (no default — see --help).');
+    printHelp();
+    process.exitCode = 1;
+    return;
+  }
+  const jsonlPath = args.sessionPath;
+  const outputPath = args.outputPath || './microfiche-output.md';
+  const maxLines = Number.isInteger(args.maxLines) ? args.maxLines : null;
 
   console.log(`Slurping ${jsonlPath}...`);
   const turns = await slurpTurns(jsonlPath, { maxLines });
