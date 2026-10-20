@@ -10,7 +10,7 @@ if (helpFlag) {
 Usage:
   sesh-hound [cwd]                    Find sessions spawned from folder
   sesh-hound --by-title <name>       Find session by agent title
-  sesh-hound --subagents <sessionId> Sense subagents in session
+  sesh-hound --subagents <substring> Sense a parent/session context selected by substring
   sesh-hound --json [...]            Output as JSON (works with any mode)
   sesh-hound --help                  Show this help`);
   process.exit(0);
@@ -169,9 +169,12 @@ async function discoverSubagents() {
       for (const dir of fs.readdirSync(projectsDir)) {
         const dirPath = path.join(projectsDir, dir);
         if (!fs.statSync(dirPath).isDirectory()) continue;
-        const filePath = path.join(dirPath, queryArg + '.jsonl');
-        if (fs.existsSync(filePath)) {
-          session = { sessionId: queryArg, file: filePath, tool: 'claude-code' };
+        const fileName = fs.readdirSync(dirPath).find(name =>
+          name.endsWith('.jsonl') && name.toLowerCase().includes(queryArg.toLowerCase())
+        );
+        if (fileName) {
+          const filePath = path.join(dirPath, fileName);
+          session = { sessionId: fileName.replace('.jsonl', ''), file: filePath, tool: 'claude-code' };
           break;
         }
       }
@@ -190,7 +193,7 @@ async function discoverSubagents() {
               if (e.isDirectory()) {
                 const found = walk(full);
                 if (found) return found;
-              } else if (e.name.includes(queryArg) && e.name.endsWith('.jsonl')) {
+              } else if (e.name.toLowerCase().includes(queryArg.toLowerCase()) && e.name.endsWith('.jsonl')) {
                 return full;
               }
             }
@@ -198,13 +201,16 @@ async function discoverSubagents() {
           return null;
         };
         const file = walk(sessionsDir);
-        if (file) session = { sessionId: queryArg, file, tool: 'codex' };
+        if (file) {
+          const sessionId = path.basename(file).match(/([0-9a-f-]{36})/i)?.[1] || path.basename(file, '.jsonl');
+          session = { sessionId, file, tool: 'codex' };
+        }
       }
     } catch (e) { }
   }
 
   if (!session) {
-    if (!jsonOut) console.error(`Session ${queryArg} not found.`);
+    if (!jsonOut) console.error(`No session id matched substring "${queryArg}".`);
     process.exit(1);
   }
 
