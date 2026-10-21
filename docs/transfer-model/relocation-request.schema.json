@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Proposed composed relocation request",
+  "description": "A planning request for a humanoid coordinator. Does not execute animals or establish adapter support.",
+  "type": "object", "additionalProperties": false,
+  "required": ["version", "transferPlanRef", "system", "scan", "selection", "launch", "historyProjection", "outputs", "executionReady"],
+  "properties": {
+    "version": {"const": 1},
+    "transferPlanRef": {"type": "string", "minLength": 1},
+    "executionReady": {"const": false},
+    "system": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sourceStore", "rootSession", "edgeKinds", "maxEdgeDepth", "explicitPeers"],
+      "properties": {
+        "sourceStore": {"type": "string", "minLength": 1},
+        "rootSession": {"type": "string", "minLength": 1},
+        "edgeKinds": {"type": "array", "uniqueItems": true, "items": {"enum": ["native-child", "verified-conversion", "explicit-peer", "explicit-sidecar"]}},
+        "maxEdgeDepth": {"type": "integer", "minimum": 0},
+        "explicitPeers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "scan": {
+      "type": "object", "additionalProperties": false,
+      "required": ["closets", "historyWindow", "budgets", "onBudget", "executeRecordedCommands"],
+      "properties": {
+        "closets": {"type": "array", "minItems": 1, "items": {
+          "type": "object", "additionalProperties": false, "required": ["id", "harness", "root", "checkpointRef"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1}, "harness": {"type": "string", "minLength": 1},
+            "root": {"type": "string", "minLength": 1}, "checkpointRef": {"type": "string", "minLength": 1}
+          }
+        }},
+        "historyWindow": {"enum": ["full-checkpoint", "selected-intervals"]},
+        "budgets": {"$ref": "#/definitions/scanBudgets"},
+        "onBudget": {"const": "stop-with-cursor-and-partial-coverage"},
+        "executeRecordedCommands": {"const": false}
+      }
+    },
+    "selection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evidenceRef", "defaultAction", "conflicts", "followLinks", "allowedSourceRoots", "expansionBudgets", "rules"],
+      "properties": {
+        "evidenceRef": {"type": "string", "minLength": 1},
+        "defaultAction": {"const": "omit"},
+        "conflicts": {"enum": ["error", "ordered-priority"]},
+        "followLinks": {"enum": ["never", "bounded-within-allowed-roots"]},
+        "allowedSourceRoots": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "expansionBudgets": {
+          "type": "object", "additionalProperties": false, "required": ["maxFiles", "maxBytes", "maxSeconds"],
+          "properties": {"maxFiles": {"$ref": "#/definitions/positiveInteger"}, "maxBytes": {"$ref": "#/definitions/positiveInteger"}, "maxSeconds": {"$ref": "#/definitions/positiveInteger"}}
+        },
+        "rules": {"type": "array", "items": {"$ref": "#/definitions/rule"}}
+      }
+    },
+    "launch": {
+      "type": "object", "additionalProperties": false, "required": ["cwd", "projectRoots", "instructionFallback"],
+      "properties": {
+        "cwd": {"type": "string", "minLength": 1},
+        "projectRoots": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["path", "evidenceRef", "access", "requireInstructionLoading", "instructionDelivery"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1}, "evidenceRef": {"type": "string", "minLength": 1},
+            "access": {"enum": ["read-only", "read-write"]}, "requireInstructionLoading": {"type": "boolean"},
+            "instructionDelivery": {"enum": ["native-required", "scoped-overlay", "none"]}
+          },
+          "allOf": [{"if": {"properties": {"requireInstructionLoading": {"const": true}}}, "then": {"properties": {"instructionDelivery": {"enum": ["native-required", "scoped-overlay"]}}}}]
+        }},
+        "instructionFallback": {"enum": ["block", "explicit-scoped-overlay"]}
+      }
+    },
+    "historyProjection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mode", "retainedIntervals", "includeIncomingCheckpoint", "boundaryMapRef", "unknownBoundaryPolicy", "opaqueCheckpointPolicy", "relationshipClosure", "pristinePolicy", "targetHarness", "continuityValidation"],
+      "properties": {
+        "mode": {"enum": ["all", "latest-context-intervals"]},
+        "retainedIntervals": {"type": ["integer", "null"], "minimum": 1},
+        "includeIncomingCheckpoint": {"type": "boolean"},
+        "boundaryMapRef": {"type": "string", "minLength": 1},
+        "unknownBoundaryPolicy": {"const": "block"},
+        "opaqueCheckpointPolicy": {"enum": ["block", "retain-native-only-if-validated"]},
+        "relationshipClosure": {"const": "preserve-required-envelope-and-record-dependencies"},
+        "pristinePolicy": {"const": "unchanged"},
+        "targetHarness": {"type": "string", "minLength": 1},
+        "continuityValidation": {"const": "required-before-promotion"}
+      },
+      "allOf": [
+        {"if": {"properties": {"mode": {"const": "latest-context-intervals"}}}, "then": {"properties": {"retainedIntervals": {"type": "integer", "minimum": 1}, "includeIncomingCheckpoint": {"const": true}}}},
+        {"if": {"properties": {"mode": {"const": "all"}}}, "then": {"properties": {"retainedIntervals": {"type": "null"}}}}
+      ]
+    },
+    "outputs": {
+      "type": "object", "additionalProperties": false, "required": ["preserved", "expanded", "derivedHistory", "receipts"],
+      "properties": {"preserved": {"type": "string", "minLength": 1}, "expanded": {"type": "string", "minLength": 1}, "derivedHistory": {"type": "string", "minLength": 1}, "receipts": {"type": "string", "minLength": 1}}
+    }
+  },
+  "definitions": {
+    "positiveInteger": {"type": "integer", "minimum": 1},
+    "scanBudgets": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxSessions", "maxInputBytes", "maxDecodedBytes", "maxLineBytes", "maxEvents", "maxSeconds"],
+      "properties": {
+        "maxSessions": {"$ref": "#/definitions/positiveInteger"}, "maxInputBytes": {"$ref": "#/definitions/positiveInteger"},
+        "maxDecodedBytes": {"$ref": "#/definitions/positiveInteger"}, "maxLineBytes": {"$ref": "#/definitions/positiveInteger"},
+        "maxEvents": {"$ref": "#/definitions/positiveInteger"}, "maxSeconds": {"$ref": "#/definitions/positiveInteger"}
+      }
+    },
+    "actions": {"type": "array", "uniqueItems": true, "items": {"enum": ["read", "edit", "create", "write", "delete", "rename-source", "rename-destination", "scan", "mention", "unknown"]}},
+    "rule": {
+      "type": "object", "additionalProperties": false, "required": ["id", "match", "extent", "binding"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "match": {
+          "type": "object", "additionalProperties": false, "required": ["actionsAny", "actionsNone", "evidence", "sessions", "paths"],
+          "properties": {
+            "actionsAny": {"allOf": [{"$ref": "#/definitions/actions"}, {"minItems": 1}]},
+            "actionsNone": {"$ref": "#/definitions/actions"},
+            "evidence": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["explicit-tool-success", "explicit-tool-request", "inferred-shell", "mention"]}},
+            "sessions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "paths": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "extent": {
+          "type": "object", "additionalProperties": false, "required": ["mode", "anchor", "maxDepth"],
+          "properties": {"mode": {"enum": ["explicit", "folder", "tree"]}, "anchor": {"enum": ["referenced-path", "file-parent", "explicit-root"]}, "root": {"type": "string", "minLength": 1}, "maxDepth": {"type": ["integer", "null"], "minimum": 0}},
+          "allOf": [
+            {"if": {"properties": {"mode": {"enum": ["explicit", "folder"]}}}, "then": {"properties": {"maxDepth": {"const": 0}}}},
+            {"if": {"properties": {"anchor": {"const": "explicit-root"}}}, "then": {"required": ["root"]}},
+            {"if": {"properties": {"mode": {"const": "explicit"}}}, "then": {"properties": {"anchor": {"const": "referenced-path"}}}}
+          ]
+        },
+        "binding": {
+          "type": "object", "additionalProperties": false, "required": ["action", "access", "targetRole", "destinationRoot"],
+          "properties": {
+            "action": {"enum": ["copy", "symlink", "junction", "rebuild", "omit"]},
+            "access": {"enum": ["read-only", "read-write", "unavailable"]},
+            "targetRole": {"enum": ["destination-working", "shared-live", "recovery-source", "preserved-evidence", "none"]},
+            "destinationRoot": {"type": ["string", "null"]}
+          },
+          "allOf": [{"if": {"properties": {"targetRole": {"enum": ["recovery-source", "preserved-evidence"]}}}, "then": {"properties": {"access": {"enum": ["read-only", "unavailable"]}}}}]
+        }
+      }
+    }
+  }
+}

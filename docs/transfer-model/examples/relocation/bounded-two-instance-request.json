@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "transferPlanRef": "../exclusive-remapped-paths.json",
+  "executionReady": false,
+  "system": {
+    "sourceStore": "source-machine:codex:store-a", "rootSession": "example-parent",
+    "edgeKinds": ["native-child", "explicit-peer"], "maxEdgeDepth": 2, "explicitPeers": ["example-peer"]
+  },
+  "scan": {
+    "closets": [{"id": "preserved-codex", "harness": "codex", "root": "C:/Transfers/example-parent/preserved/history", "checkpointRef": "evidence/source-checkpoint.json"}],
+    "historyWindow": "full-checkpoint",
+    "budgets": {"maxSessions": 20, "maxInputBytes": 268435456, "maxDecodedBytes": 536870912, "maxLineBytes": 16777216, "maxEvents": 100000, "maxSeconds": 120},
+    "onBudget": "stop-with-cursor-and-partial-coverage", "executeRecordedCommands": false
+  },
+  "selection": {
+    "evidenceRef": "evidence/provenance.jsonl", "defaultAction": "omit", "conflicts": "error", "followLinks": "never",
+    "allowedSourceRoots": ["D:/Office", "D:/Users/example/Repositories"],
+    "expansionBudgets": {"maxFiles": 10000, "maxBytes": 1073741824, "maxSeconds": 60},
+    "rules": [
+      {"id": "copy-created", "match": {"actionsAny": ["create"], "actionsNone": [], "evidence": ["explicit-tool-success"], "sessions": [], "paths": []}, "extent": {"mode": "explicit", "anchor": "referenced-path", "maxDepth": 0}, "binding": {"action": "copy", "access": "read-write", "targetRole": "destination-working", "destinationRoot": "C:/AgentSystems/Example"}},
+      {"id": "copy-edited", "match": {"actionsAny": ["edit", "write"], "actionsNone": ["create"], "evidence": ["explicit-tool-success"], "sessions": [], "paths": []}, "extent": {"mode": "explicit", "anchor": "referenced-path", "maxDepth": 0}, "binding": {"action": "copy", "access": "read-write", "targetRole": "destination-working", "destinationRoot": "C:/AgentSystems/Example"}},
+      {"id": "link-read-without-mutation", "match": {"actionsAny": ["read"], "actionsNone": ["create", "edit", "write", "delete", "rename-source", "rename-destination"], "evidence": ["explicit-tool-success"], "sessions": [], "paths": []}, "extent": {"mode": "explicit", "anchor": "referenced-path", "maxDepth": 0}, "binding": {"action": "symlink", "access": "read-only", "targetRole": "shared-live", "destinationRoot": "C:/AgentSystems/Example/references"}},
+      {"id": "copy-selected-output-tree", "match": {"actionsAny": ["create", "edit", "write"], "actionsNone": [], "evidence": ["explicit-tool-success"], "sessions": [], "paths": ["D:/Office/Example/output/**"]}, "extent": {"mode": "tree", "anchor": "explicit-root", "root": "D:/Office/Example/output", "maxDepth": 2}, "binding": {"action": "copy", "access": "read-write", "targetRole": "destination-working", "destinationRoot": "C:/AgentSystems/Example/output"}}
+    ]
+  },
+  "launch": {
+    "cwd": "C:/AgentSystems/Example",
+    "projectRoots": [
+      {"path": "C:/AgentSystems/Example/repositories/A", "evidenceRef": "evidence/root-candidates.json#A", "access": "read-write", "requireInstructionLoading": true, "instructionDelivery": "native-required"},
+      {"path": "C:/AgentSystems/Example/references/B", "evidenceRef": "evidence/root-candidates.json#B", "access": "read-only", "requireInstructionLoading": true, "instructionDelivery": "native-required"}
+    ],
+    "instructionFallback": "block"
+  },
+  "historyProjection": {
+    "mode": "latest-context-intervals", "retainedIntervals": 2, "includeIncomingCheckpoint": true,
+    "boundaryMapRef": "evidence/context-intervals.json", "unknownBoundaryPolicy": "block",
+    "opaqueCheckpointPolicy": "retain-native-only-if-validated", "relationshipClosure": "preserve-required-envelope-and-record-dependencies",
+    "pristinePolicy": "unchanged", "targetHarness": "codex", "continuityValidation": "required-before-promotion"
+  },
+  "outputs": {"preserved": "C:/Transfers/example-parent/preserved", "expanded": "C:/Transfers/example-parent/expanded", "derivedHistory": "C:/Transfers/example-parent/derived/history/latest-two", "receipts": "C:/Transfers/example-parent/receipts"}
+}

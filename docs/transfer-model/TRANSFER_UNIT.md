@@ -2,6 +2,8 @@
 
 A system migration is a collection of individually journaled agent transfers plus a relationship and shared-resource graph. The unit is one source session in one source store at one recorded checkpoint. A session UUID is a suitable folder name, but store identity and checkpoint remain required: cloned stores can contain the same UUID with different futures.
 
+The proposed humanoid agent-relocator coordinates these units and focused animals; beaver realizes only selected filesystem bindings. [Composed operations](COMPOSED_OPERATIONS.md) defines bounded provenance scans, mutation scope, multi-root instruction requirements and slim history derivatives.
+
 This is a resumable unit of work, not a cross-filesystem atomic transaction. Files, indexes, application writers, workspaces, and external services cannot be committed together by renaming one directory. Keep a journal of completed operations, evidence, remaining dependencies, and compensating actions. After destination continuation, rollback must preserve new events and new files before reversing bindings.
 
 ## Contract
@@ -24,6 +26,7 @@ transfers/<source-session-id>/
   journal.jsonl             # append-only observations and operations
   preserved/                # unchanged recovery evidence
   expanded/                 # explicitly derived inspection copies, if needed
+  derived/history/          # recipe-identified slim/converted tapes, if selected
   workspace                 # active physical directory or explicit portal
   receipts/                 # compact validation and cleanup evidence
 ```
