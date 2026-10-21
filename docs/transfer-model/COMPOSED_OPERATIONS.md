@@ -2,6 +2,8 @@
 
 Design status: proposed interfaces and selection contract, not an implemented scan/transfer pipeline. This extends the transfer-unit model without turning beaver into an orchestrator. Preserve existing animal responsibilities and reuse their adapters. The request schema and synthetic example describe configuration, not installed commands or working harness capabilities.
 
+[Sprint 01](SPRINT_01.md) now implements bounded plain-JSONL bloodhound scanning, evidence-only selection and ambient-policy reconciliation preparation. The full scan/expansion/projection/realization/delivery pipeline below remains the target contract; implementation status is reported separately.
+
 ## Animals and trades
 
 | Piece | One responsibility | Status and seam |

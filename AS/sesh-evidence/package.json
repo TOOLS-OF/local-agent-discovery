@@ -1,0 +1,1 @@
+{"name":"@tools-of/sesh-evidence","version":"0.1.0","description":"Bounded transcript evidence and relocation planning primitives","main":"index.cjs","files":["index.cjs","lib"],"scripts":{"test":"node --test test/*.test.cjs"},"dependencies":{"acorn":"8.19.0"},"engines":{"node":">=20"},"license":"MIT"}

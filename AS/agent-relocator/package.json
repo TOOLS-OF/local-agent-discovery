@@ -1,0 +1,1 @@
+{"name":"@tools-of/agent-relocator","version":"0.1.0","description":"Read-only evidence selection and ambient reconciliation preparation for a relocation trade","bin":{"agent-relocator":"bin/agent-relocator.cjs"},"files":["bin","README.md"],"dependencies":{"@tools-of/sesh-evidence":"0.1.0"},"engines":{"node":">=20"},"license":"MIT"}

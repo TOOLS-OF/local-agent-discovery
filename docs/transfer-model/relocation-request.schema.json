@@ -115,7 +115,7 @@
           "properties": {
             "actionsAny": {"allOf": [{"$ref": "#/definitions/actions"}, {"minItems": 1}]},
             "actionsNone": {"$ref": "#/definitions/actions"},
-            "evidence": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["explicit-tool-success", "explicit-tool-request", "inferred-shell", "mention"]}},
+            "evidence": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["explicit-tool-success", "explicit-tool-request", "inferred-shell", "static-wrapper-reference", "mention"]}},
             "sessions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
             "paths": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
           }

@@ -52,4 +52,15 @@ Assert-PlanValidity 'extended access with declared coordination evidence is stru
 $plan = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'examples/readonly-history-lens.json') -Raw | ConvertFrom-Json
 $plan.history.writerAuthority = 'destination-exclusive'
 Assert-PlanValidity 'read-only lens cannot request a history writer' $plan $false
+$plan = $baseline | ConvertFrom-Json
+$plan | Add-Member -NotePropertyName ambientPolicy -NotePropertyValue ([pscustomobject]@{
+    sourceInventoryRef='source.json'; destinationInventoryRef='destination.json'; recordedPolicyRefs=@('recorded-policy.json');
+    agentGuidanceRef='AGENTS.migration.md'; reconciliation='pending-agent-review'; automaticApplication=$false; hookActivation='individual-review-required'
+})
+Assert-PlanValidity 'ambient handoff is separate from automatic settings application' $plan $true
+$plan.ambientPolicy.automaticApplication = $true
+Assert-PlanValidity 'ambient handoff cannot blindly apply source globals' $plan $false
+$plan.ambientPolicy.automaticApplication = $false
+$plan.ambientPolicy.hookActivation = 'enable-all'
+Assert-PlanValidity 'source hooks cannot become automatically enabled' $plan $false
 Write-Output "$checks transfer configuration schema checks passed. No transfers or links were executed."
