@@ -22,6 +22,15 @@ def profiles():
         'capabilities': {'historyCoordination': 'unneeded', 'evidence': [], 'requiredAcceptance': 'unverified'},
         'executionReady': False, 'blockers': ['Planning preset; checkpoint, dependency closure, namespace collisions, and adapter acceptance need verification.']}
     result = [baseline]
+    linked_portal = copy.deepcopy(baseline)
+    linked_portal['name'] = 'exclusive-original-paths-linked-workspace'
+    linked_portal['resources'][0]['sharingGroup'] = 'destination-agent-a-replica'
+    linked_portal['resources'].append({'id': 'workspace-portal', 'kind': 'workspace',
+        'materialization': 'symlink', 'targetRole': 'destination-working', 'access': 'read-write',
+        'sharingGroup': 'destination-agent-a-replica', 'sourcePath': 'C:/Office/Agent_A',
+        'destinationPath': 'C:/Transfers/example-parent/workspace'})
+    linked_portal['blockers'] = ['Verify the exact-path replica and its link are the same filesystem resource; compare lexical and canonical cwd plus instruction ancestry before allowing alias-path launch.']
+    result.append(linked_portal)
     relocated = copy.deepcopy(baseline)
     relocated['name'] = 'exclusive-remapped-paths'
     relocated['cwd'].update(logicalPolicy='remapped', requestedPath='C:/AgentSystems/Agent_A')

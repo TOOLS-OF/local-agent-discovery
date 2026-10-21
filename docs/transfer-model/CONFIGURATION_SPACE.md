@@ -4,7 +4,7 @@ Agent transfer changes a running system's history, relationships, files, path na
 
 `sesh-beaver` is the chosen name for this transfer planner and habitat reconstruction coordinator. This is a proposed contract, not an implemented transport. Session discovery should supply evidence to the planner and retain its read-only role. The JSON schema describes choices and some consistency rules; it does not establish harness support, enforce leases, create links, or certify readiness.
 
-The `examples/` directory contains seven synthetic profiles. Rebuild them with `python docs/transfer-model/build_examples.py` from the repository root. Run `docs/transfer-model/test_schema.ps1` in PowerShell to exercise 19 structural acceptance and rejection cases. The fixtures deliberately remain unready; test-only readiness assertions are declarations in synthetic examples, not runtime evidence.
+The `examples/` directory contains eight synthetic profiles. Rebuild them with `python docs/transfer-model/build_examples.py` from the repository root. Run `docs/transfer-model/test_schema.ps1` in PowerShell to exercise 20 structural acceptance and rejection cases. The fixtures deliberately remain unready; test-only readiness assertions are declarations in synthetic examples, not runtime evidence.
 
 ## Independent axes
 
@@ -33,6 +33,7 @@ Resource binding needs a graph, because the same agent may copy history, share a
 | Profile | History and identity | Workspace and paths | Expected behavior |
 | --- | --- | --- | --- |
 | Exclusive move with original paths | Copy checkpoint, retain identity, source stopped | Independent files at original logical paths | One authorized future continuation; substantial path compatibility if required surrounding dependencies are present |
+| Original-path replica with linked workspace portal | Copy checkpoint, retain identity, source stopped | Physical replica at the original path; transfer folder's workspace is a symlink to it | The link and canonical path reach one replica. Launch at the original path for the first probe; test alias-path launch and instruction ancestry separately |
 | Exclusive move with relocation | Copy checkpoint, retain identity, source stopped | Selected or complete layout at a new cwd, explicit repairs | One authorized continuation with measured environmental changes |
 | Independent fork | Native fork or copied checkpoint with distinct identity namespace | Independent workspace, old paths in an isolated namespace or new mapped paths | Independent future histories; shared services remain coupled unless separately isolated |
 | Fork with shared embodiment | Independent histories and identities | Link selected read/write workspace or memory resources | Histories diverge while artifacts and external effects can influence both agents |

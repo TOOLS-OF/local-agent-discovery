@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "name": "exclusive-original-paths-linked-workspace",
+  "sourceStore": "source-machine:codex:store-a",
+  "destinationStore": "destination-machine:codex:store-b",
+  "continuity": {
+    "intent": "exclusive-continuation",
+    "sourceWriter": "stopped"
+  },
+  "identity": {
+    "policy": "retain-exclusive",
+    "sourceSession": "example-parent",
+    "destinationSession": "example-parent"
+  },
+  "history": {
+    "binding": "snapshot-copy",
+    "writerAuthority": "destination-exclusive",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "original",
+    "namespace": "host",
+    "requestedPath": "C:/Office/Agent_A",
+    "extent": "selected-closure"
+  },
+  "instructions": "preserve",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "snapshot-copy",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": "destination-agent-a-replica",
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/Office/Agent_A"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "snapshot-copy",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": null,
+      "sourcePath": "source-store:/sessions/example-parent",
+      "destinationPath": "destination-store:/sessions/example-parent"
+    },
+    {
+      "id": "workspace-portal",
+      "kind": "workspace",
+      "materialization": "symlink",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": "destination-agent-a-replica",
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/Transfers/example-parent/workspace"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unneeded",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Verify the exact-path replica and its link are the same filesystem resource; compare lexical and canonical cwd plus instruction ancestry before allowing alias-path launch."
+  ]
+}

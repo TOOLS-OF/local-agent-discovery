@@ -6,7 +6,7 @@ Plan and reconstruct an agent's habitat across computers, drives, and harness st
 
 Coordinate discovery, dependency manifests, explicit continuity/fork choices, per-resource copy/link/rebuild choices, path resolution, delivery, continuation validation, and disposable-state cleanup. Record requested intent separately from observed effects and adapter capabilities.
 
-The [configuration-space contract](../../docs/transfer-model/CONFIGURATION_SPACE.md) includes seven candidate profiles and a JSON schema. Its checks establish structural consistency, not runtime support.
+The [configuration-space contract](../../docs/transfer-model/CONFIGURATION_SPACE.md) includes eight candidate profiles and a JSON schema. Its checks establish structural consistency, not runtime support.
 
 ## Place in the kingdom
 
