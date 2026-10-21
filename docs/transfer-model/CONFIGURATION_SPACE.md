@@ -1,8 +1,8 @@
-# Agent transfer configuration space
+# Sesh beaver configuration space
 
 Agent transfer changes a running system's history, relationships, files, path namespace, instructions, tools, and authority. A reusable planner must expose those choices independently. The user's distinction between forking consciousness and extending it is represented operationally as branching future history versus providing continued access to one lineage. Filesystem mechanics alone do not establish either outcome.
 
-This is a proposed contract for a transfer planner, not an implemented transport. Session discovery should supply evidence to that planner and retain its read-only role. The JSON schema describes choices and some consistency rules; it does not establish harness support, enforce leases, create links, or certify readiness.
+`sesh-beaver` is the chosen name for this transfer planner and habitat reconstruction coordinator. This is a proposed contract, not an implemented transport. Session discovery should supply evidence to the planner and retain its read-only role. The JSON schema describes choices and some consistency rules; it does not establish harness support, enforce leases, create links, or certify readiness.
 
 The `examples/` directory contains seven synthetic profiles. Rebuild them with `python docs/transfer-model/build_examples.py` from the repository root. Run `docs/transfer-model/test_schema.ps1` in PowerShell to exercise 19 structural acceptance and rejection cases. The fixtures deliberately remain unready; test-only readiness assertions are declarations in synthetic examples, not runtime evidence.
 
