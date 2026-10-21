@@ -45,6 +45,7 @@
     },
     "instructions": {"enum": ["preserve", "overlay", "replace"]},
     "tools": {"enum": ["pin-source", "validate-target", "mixed-explicit", "unavailable"]},
+    "repositoryRestoreRef": {"type":"string","minLength":1,"description":"Git restoration request validated separately with git-restore.schema.json; does not imply execution support."},
     "ambientPolicy": {
       "type": "object", "additionalProperties": false,
       "required": ["sourceInventoryRef", "destinationInventoryRef", "recordedPolicyRefs", "agentGuidanceRef", "reconciliation", "automaticApplication", "hookActivation"],

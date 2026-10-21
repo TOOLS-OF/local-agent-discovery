@@ -14,7 +14,7 @@
       "properties": {
         "sourceStore": {"type": "string", "minLength": 1},
         "rootSession": {"type": "string", "minLength": 1},
-        "edgeKinds": {"type": "array", "uniqueItems": true, "items": {"enum": ["native-child", "verified-conversion", "explicit-peer", "explicit-sidecar"]}},
+        "edgeKinds": {"type": "array", "uniqueItems": true, "items": {"enum": ["native-child", "created-task", "verified-conversion", "explicit-peer", "explicit-sidecar"]}},
         "maxEdgeDepth": {"type": "integer", "minimum": 0},
         "explicitPeers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
       }
