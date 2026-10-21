@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "name": "fork-shared-embodiment",
+  "sourceStore": "source-machine:codex:store-a",
+  "destinationStore": "destination-machine:codex:store-b",
+  "continuity": {
+    "intent": "fork",
+    "sourceWriter": "active"
+  },
+  "identity": {
+    "policy": "native-fork-id",
+    "sourceSession": "example-parent",
+    "destinationSession": null
+  },
+  "history": {
+    "binding": "native-fork",
+    "writerAuthority": "destination-exclusive",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "remapped",
+    "namespace": "host",
+    "requestedPath": "C:/AgentSystems/Agent_A_branch",
+    "extent": "selected-closure"
+  },
+  "instructions": "overlay",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "symlink",
+      "targetRole": "shared-live",
+      "access": "read-write",
+      "sharingGroup": "agent-a-shared-workspace",
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/AgentSystems/Agent_A_branch"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "native-harness",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": null,
+      "sourcePath": "source-store:/sessions/example-parent",
+      "destinationPath": "destination-store:/sessions/<native-fork-id>"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    },
+    {
+      "consumer": "old absolute paths",
+      "basis": "absolute",
+      "resolution": "configure",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unneeded",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Independent histories are intended; filesystem edits are intentionally coupled. Verify link target, concurrent-write behavior, and shared services."
+  ]
+}

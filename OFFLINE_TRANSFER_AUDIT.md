@@ -74,3 +74,12 @@ operations to reconstruct state where possible.
 The current history renderer emitted warnings for some historical tool items
 with unknown turn IDs. Keep complete raw evidence and distinguish readable
 recent history from verified full historical UI fidelity.
+
+## Reusable configuration model
+
+The proposed [transfer configuration space](docs/transfer-model/CONFIGURATION_SPACE.md)
+separates continuity intent, session identity, writer authority, history storage,
+per-resource copy/link/rebuild choices, path namespace, instruction treatment,
+tool compatibility, native topology, and external effects. Its JSON schema and
+seven synthetic profiles support design and validation; they add no transfer
+executor or session-control behavior to the discovery commands.
