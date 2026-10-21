@@ -4,7 +4,7 @@ Agent transfer changes a running system's history, relationships, files, path na
 
 `sesh-beaver` is the chosen name for this transfer planner and habitat reconstruction coordinator. This is a proposed contract, not an implemented transport. Session discovery should supply evidence to the planner and retain its read-only role. The JSON schema describes choices and some consistency rules; it does not establish harness support, enforce leases, create links, or certify readiness.
 
-The `examples/` directory contains eight synthetic profiles. Rebuild them with `python docs/transfer-model/build_examples.py` from the repository root. Run `docs/transfer-model/test_schema.ps1` in PowerShell to exercise 20 structural acceptance and rejection cases. The fixtures deliberately remain unready; test-only readiness assertions are declarations in synthetic examples, not runtime evidence.
+The `examples/` directory contains nine synthetic profiles. Rebuild them with `python docs/transfer-model/build_examples.py` from the repository root. Run `docs/transfer-model/test_schema.ps1` in PowerShell to exercise 21 structural acceptance and rejection cases. The fixtures deliberately remain unready; test-only readiness assertions are declarations in synthetic examples, not runtime evidence.
 
 ## Independent axes
 
@@ -16,6 +16,7 @@ The `examples/` directory contains eight synthetic profiles. Rebuild them with `
 | History binding | Snapshot copy; native harness fork; shared live store; coordinated service; none | Independent files can diverge. A shared store needs a supported access and writer protocol |
 | Resource materialization | Snapshot copy; symlink; junction; copy-on-write overlay; Git clone; Git worktree; service reference; rebuild; omit | Apply separately to workspace, identity/memory files, instructions, tools, attachments, caches, Git metadata, and services |
 | Resource access | Read-only; read/write; unavailable | A link to read/write memory couples agents; a link to read-only reference material couples access without allowing mutual edits |
+| Availability | Independently local; source volume required; network required; unknown | Location and continued attachment are independent for workspace, history, indexes, and other resources |
 | Logical cwd | Original path string; remapped path | Preserving the string can satisfy some absolute references. A new string need not break intact relative structure |
 | Path namespace | Current host; isolated original namespace | Two systems may each see the same C: string but reach different bytes in isolated environments. On one host namespace, an exact path has one binding at a time |
 | Workspace extent | Entire source cwd; selected dependency closure; selected unverified subset | A copied agent subtree can omit a shared office dependency. Completeness must be demonstrated per required component |
@@ -78,3 +79,20 @@ Keep test cases and outcomes by configuration, harness version, OS, and filesyst
 For each case, measure four independent outcomes: **history continuation**, **resource coupling**, **tool/path compatibility**, and **behavioral instruction changes**. Include source disappearance, source reactivation, relocation of a linked target, restart, and concurrent access only as explicit planned experiments against disposable copies.
 
 The observed pilot occupies one point: exclusive copied continuation, retained IDs, source offline, new cwd, selected workspace subset, overlaid migration instructions, reconstructed Git workspaces, verified native children. Conversation continuation passed. Full operational workspace portability remains blocked by known dependencies. It is not evidence about symlinked embodiment, independent forks, or coordinated multi-host history.
+
+## Workspace and history can depend on different volumes
+
+| Workspace | History tape | Source-volume dependency |
+| --- | --- | --- |
+| Copied to C: | Copied to C: | Neither of these two resources needs D:; other dependencies may still do so |
+| Linked to D: | Copied to C: | Workspace operations depend on D: |
+| Copied to C: | Linked to D: | History reads and writes depend on D: |
+| Linked to D: | Linked to D: | Both resources depend on D: |
+
+A file symbolic link placed under a host's sessions directory can address a tape on another volume at the filesystem level. This is a `linked-live-file` history binding with separately recorded target role, access, sharing group, and availability. It does not establish supported Codex resume/discovery behavior or multiwriter coordination. A single destination writer referencing a dormant source tape is distinct from multiple live runtimes concurrently owning one history.
+
+A linked tape can leave the destination index and auxiliary state on C: while the tape bytes remain on D:. Disconnecting D: can leave a listed chat whose history cannot be opened. Appending through a normal file open can change the D: target. Application operations that rename, archive, replace, or rewrite files need separate tests; do not assume every operation preserves the link or moves only the link. A `.jsonl` link to compressed `.jsonl.zst` content performs no decompression. The harness must understand the actual encoding/layout.
+
+The proposed adapter acceptance suite must observe discovery, explicit resume, app visibility, append target, native child lookup, auxiliary dependencies, compaction, archive/unarchive, restart, and source-volume disappearance against disposable data. These are proposed tests, not observed results. Use one history writer unless the harness demonstrates a stronger protocol. The source recovery SSD remains read-only in the current investigation; no link-backed resume against its original tapes has been performed.
+
+Filesystem behavior references: [Windows symbolic links](https://learn.microsoft.com/en-us/windows/win32/fileio/creating-symbolic-links) and [symbolic-link effects on file operations](https://learn.microsoft.com/en-us/windows/win32/fileio/symbolic-link-effects-on-file-systems-functions). Codex's documented [app-server thread APIs](https://learn.chatgpt.com/docs/app-server) expose stored-thread resume and inspection, but those APIs alone do not certify this link arrangement.

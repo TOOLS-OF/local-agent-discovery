@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "name": "source-linked-history-copied-workspace-candidate",
+  "sourceStore": "source-machine:codex:store-a",
+  "destinationStore": "destination-machine:codex:store-b",
+  "continuity": {
+    "intent": "exclusive-continuation",
+    "sourceWriter": "stopped"
+  },
+  "identity": {
+    "policy": "retain-exclusive",
+    "sourceSession": "example-parent",
+    "destinationSession": "example-parent"
+  },
+  "history": {
+    "binding": "linked-live-file",
+    "writerAuthority": "destination-exclusive",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "original",
+    "namespace": "host",
+    "requestedPath": "C:/Office/Agent_A",
+    "extent": "selected-closure"
+  },
+  "instructions": "preserve",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "snapshot-copy",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": null,
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/Office/Agent_A",
+      "availability": "local-independent"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "symlink",
+      "targetRole": "recovery-source",
+      "access": "read-write",
+      "sharingGroup": "attached-source-history",
+      "sourcePath": "D:/Users/example/.codex/sessions/example-parent.jsonl",
+      "destinationPath": "C:/Users/example/.codex/sessions/example-parent.jsonl",
+      "availability": "source-volume-required"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unneeded",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Candidate only: Codex indexing, canonical path selection, append, replacement, archive, restart, and disconnect behavior through a linked tape are unverified.",
+    "A resumed writer may mutate the source-volume target. Recovery-source write access is not authorized by this candidate.",
+    "The destination must also resolve its own harness index and every required child tape, attachment, and other dependency."
+  ]
+}

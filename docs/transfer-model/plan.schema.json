@@ -28,7 +28,7 @@
     "history": {
       "type": "object", "additionalProperties": false, "required": ["binding", "writerAuthority", "resourceId"],
       "properties": {
-        "binding": {"enum": ["snapshot-copy", "native-fork", "shared-live-store", "coordinated-service", "none"]},
+        "binding": {"enum": ["snapshot-copy", "native-fork", "linked-live-file", "shared-live-store", "coordinated-service", "none"]},
         "writerAuthority": {"enum": ["destination-exclusive", "single-owner-lease", "harness-coordinated", "none"]},
         "resourceId": {"type": "string", "minLength": 1}
       }
@@ -72,7 +72,8 @@
         "access": {"enum": ["read-only", "read-write", "unavailable"]},
         "sharingGroup": {"type": ["string", "null"]},
         "sourcePath": {"type": ["string", "null"]},
-        "destinationPath": {"type": ["string", "null"]}
+        "destinationPath": {"type": ["string", "null"]},
+        "availability": {"enum": ["local-independent", "source-volume-required", "network-required", "unknown"]}
       }
     },
     "reference": {

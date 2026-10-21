@@ -22,6 +22,18 @@ def profiles():
         'capabilities': {'historyCoordination': 'unneeded', 'evidence': [], 'requiredAcceptance': 'unverified'},
         'executionReady': False, 'blockers': ['Planning preset; checkpoint, dependency closure, namespace collisions, and adapter acceptance need verification.']}
     result = [baseline]
+    source_history = copy.deepcopy(baseline)
+    source_history['name'] = 'source-linked-history-copied-workspace-candidate'
+    source_history['history']['binding'] = 'linked-live-file'
+    source_history['resources'][0]['availability'] = 'local-independent'
+    source_history['resources'][1].update(materialization='symlink', targetRole='recovery-source',
+        sharingGroup='attached-source-history', availability='source-volume-required',
+        sourcePath='D:/Users/example/.codex/sessions/example-parent.jsonl',
+        destinationPath='C:/Users/example/.codex/sessions/example-parent.jsonl')
+    source_history['blockers'] = ['Candidate only: Codex indexing, canonical path selection, append, replacement, archive, restart, and disconnect behavior through a linked tape are unverified.',
+        'A resumed writer may mutate the source-volume target. Recovery-source write access is not authorized by this candidate.',
+        'The destination must also resolve its own harness index and every required child tape, attachment, and other dependency.']
+    result.append(source_history)
     linked_portal = copy.deepcopy(baseline)
     linked_portal['name'] = 'exclusive-original-paths-linked-workspace'
     linked_portal['resources'][0]['sharingGroup'] = 'destination-agent-a-replica'
