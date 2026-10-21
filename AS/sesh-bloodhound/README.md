@@ -18,3 +18,5 @@ The [composed-operations contract](../../docs/transfer-model/COMPOSED_OPERATIONS
 Required events distinguish read, edit, create, unresolved create-or-overwrite, delete, rename, search and mention. Preserve requested/succeeded/failed/unknown outcomes. A shell inference or path mention must not be presented as a proven file access. Generic transcript analysis cannot guarantee every indirect filesystem operation is visible.
 
 Reuse shared tape/compression readers and harness/path adapters with nautilus and hound. Keep the raw evidence independent of a migration's eventual action filters or retained runtime-history window.
+
+See [Sprint 02](../../docs/transfer-model/SPRINT_02.md) for turn/chamber provenance, independent history/access windows, bounded folder expansion, and projection limitations.

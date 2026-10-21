@@ -61,4 +61,12 @@ $request = New-Request
 $request.selection.rules[2].binding.targetRole = 'recovery-source'
 $request.selection.rules[2].binding.access = 'read-write'
 Assert-Request 'recovery-source cannot become a writable link target' $request $false
+$request = New-Request
+$request.selection | Add-Member -NotePropertyName temporal -NotePropertyValue @{sourceTape='C:/preserved/tape.jsonl';sessionId='agent';localAgentId=$null;lastTurns=10;completion='completed'}
+Assert-Request 'history and access windows are independent' $request $true
+$request.selection.temporal.lastTurns = 0
+Assert-Request 'turn count must be positive' $request $false
+$request.selection.temporal.lastTurns = 10
+$request.selection.temporal.completion = 'guess'
+Assert-Request 'turn completion policy is explicit' $request $false
 Write-Output "$checks composed relocation request checks passed. No scans, copies, links, history projection or launches were executed."

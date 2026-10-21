@@ -28,6 +28,25 @@ function assessCoverage(pages){
 }
 function compileSelection(pages, selection) {
   const coverageComplete=assessCoverage(pages);
+  let temporalWindow=null,windowKeys=null;
+  if(selection.temporal){
+    const q=selection.temporal;
+    if(!Number.isSafeInteger(q.lastTurns)||q.lastTurns<1||!q.sourceTape||!q.sessionId||!['observed','completed'].includes(q.completion))throw new Error('Temporal query requires lastTurns, sourceTape, sessionId and observed/completed policy');
+    const scoped=pages.filter(p=>p.coverage.checkpoint.realpath===q.sourceTape);
+    if(!scoped.length||scoped.some(p=>p.turnIndexVersion!==1))throw new Error('Temporal query requires fresh turn-indexed evidence pages');
+    if(scoped[0].coverage.startOffset!==0||scoped.at(-1).coverage.endOffset!==scoped.at(-1).coverage.checkpoint.size||scoped.some(p=>p.coverage.gaps.length))throw new Error('Temporal query requires complete record coverage for its explicit source tape');
+    const turns=new Map();
+    for(const p of scoped)for(const e of p.events){if(e.eventKind!=='turn-boundary'||e.turn.sessionId!==q.sessionId||(e.turn.localAgentId||null)!==(q.localAgentId||null))continue;
+      const t=turns.get(e.turn.key)||{...e.turn,chambers:[],status:'observed'};
+      if(!t.chambers.includes(e.chamber))t.chambers.push(e.chamber);
+      if(e.phase==='completed'||e.phase==='aborted')t.status=e.phase;
+      turns.set(e.turn.key,t);
+    }
+    const eligible=[...turns.values()].filter(t=>q.completion==='observed'||t.status==='completed');
+    const retained=eligible.slice(-q.lastTurns);windowKeys=new Set(retained.map(t=>t.key));
+    temporalWindow={...q,turns:retained,availableTurns:eligible.length,requestedTurns:q.lastTurns,windowSatisfied:retained.length===q.lastTurns,unknownTurnAccessesExcluded:0,
+      scope:'One explicitly identified source tape and actor; no inferred ordering across tapes. File filters operate within this window independently of history projection.'};
+  }
   if (!['error','ordered-priority'].includes(selection.conflicts)) throw new Error('Explicit conflict policy required');
   if (selection.defaultAction!=='omit') throw new Error('Unmatched files must remain omitted in v0.1');
   if (new Set(selection.rules.map(r=>r.id)).size!==selection.rules.length) throw new Error('Duplicate rule IDs');
@@ -43,10 +62,14 @@ function compileSelection(pages, selection) {
   // Updates for one call replace its requested observation; independent calls remain independent.
   for(const page of pages) for(const event of page.events) {
     if(event.eventKind!=='file-access') continue;
+    if(temporalWindow){if(page.coverage.checkpoint.realpath!==temporalWindow.sourceTape)continue;
+      if(!event.turn){temporalWindow.unknownTurnAccessesExcluded++;continue;}
+      if(!windowKeys.has(event.turn.key))continue;
+    }
     const key=keyFor(event);
     if(!key) {unresolved.push(event);continue;}
     const identity=`${page.coverage.checkpoint.realpath}:${event.observationId}`;
-    observations.set(identity,{...event,pathKey:key});
+    observations.set(identity,{...event,pathKey:key,sourceTape:page.coverage.checkpoint.realpath});
   }
   const groups=new Map();
   for(const e of observations.values()) {if(!groups.has(e.pathKey))groups.set(e.pathKey,[]);groups.get(e.pathKey).push(e);}
@@ -56,7 +79,7 @@ function compileSelection(pages, selection) {
     const matches=[];
     for(const rule of selection.rules) {
       const q=rule.match;
-      const relevant=events.filter(e=>(!q.sessions?.length||q.sessions.includes(e.sessionId)) && (!q.paths?.length||q.paths.some(p=>glob(p,e.resolvedPath))));
+      const relevant=events.filter(e=>(!q.sessions?.length||q.sessions.includes(e.sessionId)) && (!q.paths?.length||q.paths.some(p=>glob(p,e.resolvedPath))) && (!q.pathsNone?.some(p=>glob(p,e.resolvedPath))));
       const qualifying=relevant.filter(e=>q.evidence.includes(e.evidence)&&e.outcome!=='failed');
       if(!qualifying.some(e=>q.actionsAny.includes(e.action)))continue;
       // Any nonfailed recorded mutation blocks a read-only selector, even if evidence is weaker.
@@ -68,10 +91,10 @@ function compileSelection(pages, selection) {
     if(signatures.size>1 && selection.conflicts==='error') {conflicts.push({path:events[0].resolvedPath,rules:matches.map(r=>r.id)});continue;}
     const chosen=matches[0];
     selected.push({path:events[0].resolvedPath,pathKey:key,ruleId:chosen.id,matchedRules:matches.map(r=>r.id),actions:[...new Set(events.map(e=>e.action))],
-      evidence:events.map(e=>({sessionId:e.sessionId,action:e.action,outcome:e.outcome,evidence:e.evidence,source:e.source})),extent:chosen.extent,binding:chosen.binding});
+      evidence:events.map(e=>({sessionId:e.sessionId,localAgentId:e.localAgentId||null,sourceStoreId:e.sourceStoreId||null,action:e.action,outcome:e.outcome,evidence:e.evidence,sourceTape:e.sourceTape,callId:e.callId,chamber:e.chamber,turn:e.turn||null,source:e.source,resultSource:e.resultSource})),extent:chosen.extent,binding:chosen.binding});
   }
   const complete=coverageComplete;
-  return {schema:'sesh-selection-preview/v1',selected,omitted,conflicts,unresolved,outOfScope,
+  return {schema:'sesh-selection-preview/v1',selected,omitted,conflicts,unresolved,outOfScope,temporalWindow,
     transcriptCoverageComplete:complete,executionReady:false,
     blockers:[...(!complete?['Transcript coverage has gaps or partial pages']:[]),...(conflicts.length?['Resolve overlapping selection rules']:[]),
       'Filesystem expansion, destinations, collisions, link capabilities, instruction loading and dependency completeness are not yet validated'],

@@ -91,3 +91,5 @@ embedded images, and resumed without error.
 ## License
 
 MIT
+
+See [Sprint 02](../../docs/transfer-model/SPRINT_02.md) for turn/chamber provenance, independent history/access windows, bounded folder expansion, and projection limitations.

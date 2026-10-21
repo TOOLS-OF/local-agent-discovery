@@ -10,11 +10,14 @@
 // compact it. sesh-nautilus restores the missing structure by extracting
 // the source harness's real boundary events and re-inserting them at the
 // correct point (by timestamp) in the target harness's converted file.
+if (['inspect', 'plan', 'project'].includes(process.argv[2])) {
+  require('./history-operations.cjs').main(process.argv.slice(2)).catch(e => { console.error('sesh-nautilus:', e.message); process.exitCode = 1; });
+} else {
 const path = require('path');
 const {
   createBoundaryExtractor,
   createBoundaryInserter,
-} = require('../../../lib/boundary-reconstruction.js');
+} = require('../lib/boundary-reconstruction.cjs');
 
 function parseArgs(argv) {
   const args = { fromHarness: 'codex', toHarness: 'claude-code' };
@@ -35,6 +38,7 @@ function printHelp() {
   console.log(`sesh-nautilus — reconstruct dropped compaction boundaries after session conversion
 
 Usage:
+  sesh-nautilus inspect|plan|project --help
   sesh-nautilus --source <source-session-file> --target <target-session-file> --output <output-file>
                 [--from-harness codex] [--to-harness claude-code] [--json]
 
@@ -89,3 +93,5 @@ async function main() {
 }
 
 main().catch(e => { console.error('sesh-nautilus error:', e.message); process.exit(1); });
+
+}
