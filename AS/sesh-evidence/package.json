@@ -1,6 +1,6 @@
 {
   "name": "@tools-of/sesh-evidence",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Bounded transcript evidence and relocation planning primitives",
   "main": "index.cjs",
   "files": [

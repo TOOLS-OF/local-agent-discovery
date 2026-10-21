@@ -4,6 +4,16 @@ Reconstruct compaction/context-boundary structure that cross-harness session
 converters (e.g. [transession](https://github.com/inmzhang/transession)) drop
 during translation.
 
+## Native history preparation (1.1.1)
+
+`inspect`, `plan` and `project` share bounded readers with Bloodhound. Use each
+subcommand's `--help`, or the [preparation workflow](../../docs/transfer-model/PREPARATION_WORKFLOW.md).
+Latest-N candidates retain incoming and intervening native checkpoints, envelope
+records and tool-call closure. Correlation uses ordered occurrences, so a reused
+call ID cannot be closed by an old result. Candidates remain unvalidated for
+harness continuation. Claude inspection is supported; parent-chain projection
+is blocked. The legacy conversion interface below remains available.
+
 ## The problem
 
 A session converter maps message content between harnesses, but it typically
@@ -24,7 +34,8 @@ below.
 ## Install
 
 ```bash
-npm install -g .          # from inside this folder
+# Pack the sibling dependency and this tool, then validate in an isolated prefix.
+# See ../../CONTRIBUTING.md; avoid a mutable worktree as the global installation.
 ```
 
 ## Use
@@ -43,7 +54,7 @@ inserted at the correct points.
 
 ## What it actually does
 
-Two-part polymorphic design in `lib/boundary-reconstruction.js`, mirroring
+Two-part polymorphic design in packaged `lib/boundary-reconstruction.cjs` (the repository root retains a compatibility proxy), mirroring
 `session-discovery.js`'s `SessionDiscovery` pattern:
 
 - **`BoundaryExtractor`** (one per source harness) — pulls real boundary events

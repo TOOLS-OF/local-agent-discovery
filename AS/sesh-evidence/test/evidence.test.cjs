@@ -1,42 +1,621 @@
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs').promises;
-const os=require('node:os');
-const path=require('node:path');
-const {walkTape,scanProvenance,resolveReference,effects,compileSelection,inventoryAmbient,compareAmbient,reconciliationBrief}=require('..');
-const {assessCoverage,contains}=require('..');
-async function fixture(t,records){const dir=await fs.mkdtemp(path.join(os.tmpdir(),'sesh-evidence-'));t.after(async()=>{const absolute=path.resolve(dir);assert.equal(path.dirname(absolute),path.resolve(os.tmpdir()));assert.ok(path.basename(absolute).startsWith('sesh-evidence-'));assert.equal((await fs.lstat(absolute)).isSymbolicLink(),false);await fs.rm(absolute,{recursive:true,force:true});});const file=path.join(dir,'tape.jsonl');await fs.writeFile(file,records.map(r=>typeof r==='string'?r:JSON.stringify(r)).join('\n')+'\n');return {dir,file};}
-const meta={type:'session_meta',payload:{id:'test-session',cwd:'C:\\Office\\Agent',base_instructions:{text:'historical source policy'}}};
-const call=(id,name,args)=>({type:'response_item',payload:{type:'function_call',call_id:id,name,arguments:JSON.stringify(args)}});
-const result=(id,output)=>({type:'response_item',payload:{type:'function_call_output',call_id:id,output:JSON.stringify(output)}});
-test('bounded page cursor resumes without losing a call/result pair',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'docs/a.txt'}),result('r',{exit_code:0})]);const a=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:2}});assert.equal(a.coverage.complete,false);assert.equal(a.unresolvedCalls,1);assert.equal(a.events.find(e=>e.action==='read').outcome,'requested');const b=await scanProvenance(file,{harness:'codex',cursor:a.cursor});assert.equal(b.events[0].outcome,'succeeded');assert.equal(b.events[0].logicalPath,'C:\\Office\\Agent\\docs\\a.txt');assert.equal(b.coverage.complete,true);});
-test('cursor rejects source checkpoint change',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{path:'a'})]);const a=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:1}});await fs.appendFile(file,'{}\n');await assert.rejects(()=>scanProvenance(file,{harness:'codex',cursor:a.cursor}),/checkpoint changed/);});
-test('cursor rejects changed path mappings or harness',async t=>{const {file}=await fixture(t,[meta,{}]);const a=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:1}});await assert.rejects(()=>scanProvenance(file,{harness:'codex',cursor:a.cursor,mappings:[{from:'C:/',to:'D:/'}]}),/mappings changed/);});
-test('huge line stops with an unadvanced cursor',async t=>{const {file}=await fixture(t,[{text:'x'.repeat(10000)}]);const a=await walkTape(file,{budgets:{maxLineBytes:100}},()=>assert.fail());assert.equal(a.stopReason,'maxLineBytes');assert.equal(a.endOffset,0);});
-test('byte limit never parses a partial record',async t=>{const {file}=await fixture(t,[meta,{data:'x'.repeat(200)}]);const first=Buffer.byteLength(JSON.stringify(meta)+'\n');let seen=0;const a=await walkTape(file,{budgets:{maxInputBytes:first+10}},()=>seen++);assert.equal(seen,1);assert.equal(a.endOffset,first);assert.equal(a.stopReason,'maxInputBytes');});
-test('malformed input remains an explicit coverage gap',async t=>{const {file}=await fixture(t,[meta,'{broken']);const a=await scanProvenance(file,{harness:'codex'});assert.equal(a.coverage.complete,true);assert.equal(a.gaps[0].kind,'malformed-json');});
-test('compressed input is refused, not mistaken for empty JSONL',async()=>{await assert.rejects(()=>walkTape('some.jsonl.zst',{},()=>{}),/Compressed input unsupported/);});
-test('Write remains ambiguous and failed writes remain failed',async t=>{const {file}=await fixture(t,[meta,call('w','Write',{file_path:'out.md'}),result('w',{exit_code:2})]);const a=await scanProvenance(file,{harness:'codex'});assert.equal(a.events.at(-1).action,'write');assert.equal(a.events.at(-1).outcome,'failed');assert.ok(!a.events.some(e=>e.action==='create'));});
-test('explicit new-file patch and tool success establish create evidence',async t=>{const {file}=await fixture(t,[meta,{type:'response_item',payload:{type:'custom_tool_call',call_id:'p',name:'apply_patch',input:'*** Begin Patch\n*** Add File: new.txt\n+x\n*** End Patch'}},{type:'response_item',payload:{type:'custom_tool_call_output',call_id:'p',output:'Success. Updated the following files:\nA new.txt'}}]);const a=await scanProvenance(file,{harness:'codex'});assert.equal(a.events.at(-1).evidence,'explicit-tool-success');assert.equal(a.events.at(-1).action,'create');});
-test('Claude tool requests correlate with results and cwd',async t=>{const {file}=await fixture(t,[{sessionId:'claude-one',cwd:'/office/a',message:{content:[{type:'tool_use',id:'c',name:'Read',input:{file_path:'docs/x'}}]}},{message:{content:[{type:'tool_result',tool_use_id:'c',content:'ok'}]}}]);const a=await scanProvenance(file,{harness:'claude-code'});assert.equal(a.events.at(-1).resolvedPath,'/office/a/docs/x');assert.equal(a.events.at(-1).evidence,'explicit-tool-success');});
-test('opaque nested tool wrappers are a gap rather than a completeness claim',async t=>{const {file}=await fixture(t,[meta,call('x','functions.exec',{code:'await tools.exec_command({cmd:"anything"})'})]);const a=await scanProvenance(file,{harness:'codex'});assert.ok(a.gaps.some(e=>e.kind==='unsupported-or-opaque-tool'));});
-test('shell operations remain inferred even with a successful exit',async t=>{const {file}=await fixture(t,[meta,call('s','exec_command',{cmd:'Get-Content -LiteralPath "C:\\Office\\a.md"'}),result('s',{exit_code:0})]);const a=await scanProvenance(file,{harness:'codex'});assert.equal(a.events.find(e=>e.action==='read'&&e.outcome==='succeeded').evidence,'inferred-shell');});
-test('environment variables and unresolved bases remain unresolved',()=>{assert.equal(resolveReference('$HOME/a','/office').resolvedPath,null);assert.equal(resolveReference('a',null).resolvedPath,null);assert.equal(resolveReference('C:\\Office\\a','C:\\x',[{from:'C:/Office',to:'D:/Office'}]).resolvedPath,'D:/Office/a');});
-test('cross-page selection replaces requested evidence with its result',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'a'}),result('r',{exit_code:0})]);const a=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:2}}),b=await scanProvenance(file,{harness:'codex',cursor:a.cursor});const selection={defaultAction:'omit',conflicts:'error',allowedSourceRoots:['C:/Office'],rules:[{id:'read',match:{actionsAny:['read'],actionsNone:['edit','write'],evidence:['explicit-tool-success']},extent:{mode:'explicit',maxDepth:0},binding:{action:'copy'}}]};const preview=compileSelection([a,b],selection);assert.equal(preview.selected.length,1);assert.equal(preview.selected[0].evidence.length,1);assert.equal(preview.executionReady,false);});
-test('incompatible action rules report conflicts rather than picking silently',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'a'}),result('r',{exit_code:0})]);const page=await scanProvenance(file,{harness:'codex'});const rule={match:{actionsAny:['read'],actionsNone:[],evidence:['explicit-tool-success']},extent:{mode:'explicit',maxDepth:0},binding:{action:'copy'}};const p=compileSelection([page],{defaultAction:'omit',conflicts:'error',allowedSourceRoots:['C:/Office'],rules:[{...rule,id:'one'},{...rule,id:'two',binding:{action:'symlink'}}]});assert.equal(p.conflicts.length,1);assert.equal(p.selected.length,0);});
-test('ambient inventory exposes fingerprints without copying config contents or running hooks',async t=>{const {dir}=await fixture(t,[]);await fs.mkdir(path.join(dir,'.claude/hooks'),{recursive:true});await fs.writeFile(path.join(dir,'.claude/CLAUDE.md'),'machine A');await fs.writeFile(path.join(dir,'.claude/hooks/do-not-run.js'),'throw new Error("must not execute")');await fs.writeFile(path.join(dir,'.claude/auth.json'),'private authentication');const inventory=await inventoryAmbient(dir);assert.equal(inventory.records.length,2);assert.equal(inventory.hooksExecuted,false);assert.ok(!JSON.stringify(inventory).includes('machine A'));assert.ok(!inventory.records.some(r=>r.relative.endsWith('auth.json')));assert.match(reconciliationBrief(inventory,inventory,compareAmbient(inventory,inventory)),/reasoning task/);});
-test('ambient byte limit yields a gap and no false whole-home completeness',async t=>{const {dir}=await fixture(t,[]);await fs.writeFile(path.join(dir,'AGENTS.md'),'x'.repeat(100));const a=await inventoryAmbient(dir,{maxBytes:10});assert.equal(a.complete,false);assert.equal(a.records.length,0);assert.equal(a.gaps[0].kind,'maxBytes');});
-test('recorded source policy snapshot is fingerprinted but not dumped',async t=>{const {file}=await fixture(t,[meta]);const a=await scanProvenance(file,{harness:'codex'});assert.equal(a.events[0].eventKind,'recorded-policy-snapshot');assert.ok(!JSON.stringify(a.events).includes('historical source policy'));});
-test('literal nested tool references are statically extracted without evaluating JS',async t=>{const {file}=await fixture(t,[meta,call('x','functions.exec',{code:'globalThis.seshMustNotExecute = true; if(false) await tools.apply_patch("*** Add File: candidate.txt\\n+x");'})]);const a=await scanProvenance(file,{harness:'codex'});assert.equal(globalThis.seshMustNotExecute,undefined);const ref=a.events.find(e=>e.action==='create');assert.equal(ref.evidence,'static-wrapper-reference');assert.equal(ref.executionVerified,false);assert.ok(a.gaps.some(e=>e.kind==='wrapper-execution-not-verified'));});
-test('ambient settings directories are not assumed to be historical effective policy',async t=>{const {dir}=await fixture(t,[]);await fs.writeFile(path.join(dir,'CLAUDE.md'),'source machine policy');const a=await inventoryAmbient(dir);assert.equal(a.settingsApplied,false);assert.match(reconciliationBrief(a,a,compareAmbient(a,a)),/not proof of which versions were active/);});
-test('coverage is complete only for a contiguous whole-checkpoint page set',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'a'}),result('r',{exit_code:0})]);const a=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:2}}),b=await scanProvenance(file,{harness:'codex',cursor:a.cursor});assert.equal(assessCoverage([b]),false);assert.equal(assessCoverage([a,b]),true);assert.throws(()=>assessCoverage([a,a]),/out-of-order/);assert.throws(()=>assessCoverage([b,a]),/out-of-order/);});
-test('root containment respects drive and component boundaries',()=>{assert.equal(contains('D:/Office','D:/Office/Agent/a'),true);assert.equal(contains('D:/Office','D:/OfficeElse/a'),false);assert.equal(contains('D:/Office','D:/Office/../other'),false);assert.equal(contains('D:/Office','C:/Office/a'),false);});
-test('selector excludes candidate paths outside explicitly allowed roots',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'C:/Other/a'}),result('r',{exit_code:0})]);const page=await scanProvenance(file,{harness:'codex'});const p=compileSelection([page],{defaultAction:'omit',conflicts:'error',allowedSourceRoots:['C:/Office'],rules:[]});assert.equal(p.outOfScope.length,1);assert.equal(p.selected.length,0);});
-test('selector rejects widening a folder anchor outside approved roots',()=>{assert.throws(()=>compileSelection([],{defaultAction:'omit',conflicts:'error',allowedSourceRoots:['D:/Office'],rules:[{id:'a',extent:{mode:'tree',maxDepth:2,anchor:'explicit-root',root:'D:/'},binding:{action:'copy'}}]}),/outside allowed/);});
-test('ambient comparison preserves destination-only policy as a visible category',()=>{const a={records:[]},b={records:[{relative:'AGENTS.md',path:'C:/home/AGENTS.md',sha256:'abc',kind:'user-instructions'}]};assert.equal(compareAmbient(a,b)[0].status,'destination-only');assert.equal(compareAmbient(a,b)[0].decision,'preserve-current-unless-reasoned-change');});
-test('duplicate identical Claude requests are recorded without inventing two successful operations',async t=>{const r={sessionId:'parent',cwd:'/work',message:{content:[{type:'tool_use',id:'duplicate',name:'Read',input:{file_path:'a'}}]}};const {file}=await fixture(t,[r,r,{message:{content:[{type:'tool_result',tool_use_id:'duplicate',content:'ok'}]}}]);const p=await scanProvenance(file,{harness:'claude-code'});assert.ok(p.gaps.some(g=>g.kind==='duplicate-identical-tool-request'));assert.equal(p.events.filter(e=>e.outcome==='succeeded').length,1);});
-test('contradictory duplicate requests do not receive a fabricated success attribution',async t=>{const r=target=>({sessionId:'p',cwd:'/work',message:{content:[{type:'tool_use',id:'duplicate',name:'Read',input:{file_path:target}}]}});const {file}=await fixture(t,[r('a'),r('b'),{message:{content:[{type:'tool_result',tool_use_id:'duplicate',content:'ok'}]}}]);const p=await scanProvenance(file,{harness:'claude-code'});assert.ok(p.gaps.some(g=>g.kind==='ambiguous-result-correlation'));assert.equal(p.events.filter(e=>e.outcome==='succeeded').length,0);});
-test('Claude local-agent identity remains scoped to its parent session and source store',async t=>{const {file}=await fixture(t,[{sessionId:'parent',agentId:'local-one',isSidechain:true,cwd:'/work',message:{content:[{type:'tool_use',id:'r',name:'Read',input:{file_path:'a'}}]}}]);const p=await scanProvenance(file,{harness:'claude-code',sourceStoreId:'cold-store'});assert.equal(p.events[0].sessionId,'parent');assert.equal(p.events[0].localAgentId,'local-one');assert.equal(p.events[0].sourceStoreId,'cold-store');});
-test('recorded Agent result identifiers remain distinct from verified live native handles',async t=>{const {file}=await fixture(t,[{sessionId:'parent',message:{content:[{type:'tool_use',id:'spawn',name:'Agent',input:{name:'helper'}}]}},{tool_use_result:{agentId:'local-child'},message:{content:[{type:'tool_result',tool_use_id:'spawn',content:'done'}]}}]);const p=await scanProvenance(file,{harness:'claude-code'});const e=p.events.find(e=>e.eventKind==='spawn-result');assert.equal(e.childLocalAgentId,'local-child');assert.equal(e.nativeRelationshipVerified,false);});
-test('WSL paths require explicit namespace mapping rather than accidental Windows rooting',()=>{assert.equal(resolveReference('/mnt/c/Office/a','C:/Office').resolvedPath,null);assert.equal(resolveReference('/mnt/c/Office/a','C:/Office',[{from:'/mnt/c',to:'D:/'}]).resolvedPath,'D:/Office/a');assert.equal(resolveReference('/tmp/a','C:/Office').resolvedPath,null);});
-test('explicit negative path filters can separate preserved tapes from workspace selection',async t=>{const {file}=await fixture(t,[meta,call('r','Read',{file_path:'C:/Office/history/a.jsonl'}),result('r',{exit_code:0})]);const p=await scanProvenance(file,{harness:'codex'});const preview=compileSelection([p],{defaultAction:'omit',conflicts:'error',allowedSourceRoots:['C:/Office'],rules:[{id:'read',match:{actionsAny:['read'],actionsNone:[],evidence:['explicit-tool-success'],pathsNone:['C:/Office/history/**']},extent:{mode:'explicit',maxDepth:0},binding:{action:'copy'}}]});assert.equal(preview.selected.length,0);});
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs').promises;
+const os = require('node:os');
+const path = require('node:path');
+const {
+  walkTape,
+  scanProvenance,
+  resolveReference,
+  effects,
+  compileSelection,
+  inventoryAmbient,
+  compareAmbient,
+  reconciliationBrief,
+} = require('..');
+const { assessCoverage, contains } = require('..');
+async function fixture(t, records) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sesh-evidence-'));
+  t.after(async () => {
+    const absolute = path.resolve(dir);
+    assert.equal(path.dirname(absolute), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(absolute).startsWith('sesh-evidence-'));
+    assert.equal((await fs.lstat(absolute)).isSymbolicLink(), false);
+    await fs.rm(absolute, { recursive: true, force: true });
+  });
+  const file = path.join(dir, 'tape.jsonl');
+  await fs.writeFile(
+    file,
+    records
+      .map((r) => (typeof r === 'string' ? r : JSON.stringify(r)))
+      .join('\n') + '\n',
+  );
+  return { dir, file };
+}
+const meta = {
+  type: 'session_meta',
+  payload: {
+    id: 'test-session',
+    cwd: 'C:\\Office\\Agent',
+    base_instructions: { text: 'historical source policy' },
+  },
+};
+const call = (id, name, args) => ({
+  type: 'response_item',
+  payload: {
+    type: 'function_call',
+    call_id: id,
+    name,
+    arguments: JSON.stringify(args),
+  },
+});
+const result = (id, output) => ({
+  type: 'response_item',
+  payload: {
+    type: 'function_call_output',
+    call_id: id,
+    output: JSON.stringify(output),
+  },
+});
+
+test('ambient allowlisted files cannot traverse an ancestor junction outside home', async (t) => {
+  const { dir } = await fixture(t, []),
+    home = path.join(dir, 'home'),
+    outside = path.join(dir, 'outside');
+  await fs.mkdir(home);
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'AGENTS.md'), 'outside guidance');
+  const link = path.join(home, '.codex');
+  await fs.symlink(
+    outside,
+    link,
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  try {
+    const inventory = await inventoryAmbient(home);
+    assert.equal(inventory.bytesHashed, 0);
+    assert.equal(inventory.complete, false);
+    assert.ok(
+      inventory.gaps.some((g) => g.kind === 'ancestor-link-not-followed'),
+    );
+    assert.ok(!inventory.records.some((r) => r.sha256));
+  } finally {
+    await fs.unlink(link);
+  }
+});
+test('bounded page cursor resumes without losing a call/result pair', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'docs/a.txt' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const a = await scanProvenance(file, {
+    harness: 'codex',
+    budgets: { maxEvents: 2 },
+  });
+  assert.equal(a.coverage.complete, false);
+  assert.equal(a.unresolvedCalls, 1);
+  assert.equal(a.events.find((e) => e.action === 'read').outcome, 'requested');
+  const b = await scanProvenance(file, { harness: 'codex', cursor: a.cursor });
+  assert.equal(b.events[0].outcome, 'succeeded');
+  assert.equal(b.events[0].logicalPath, 'C:\\Office\\Agent\\docs\\a.txt');
+  assert.equal(b.coverage.complete, true);
+});
+test('cursor rejects source checkpoint change', async (t) => {
+  const { file } = await fixture(t, [meta, call('r', 'Read', { path: 'a' })]);
+  const a = await scanProvenance(file, {
+    harness: 'codex',
+    budgets: { maxEvents: 1 },
+  });
+  await fs.appendFile(file, '{}\n');
+  await assert.rejects(
+    () => scanProvenance(file, { harness: 'codex', cursor: a.cursor }),
+    /checkpoint changed/,
+  );
+});
+test('cursor rejects changed path mappings or harness', async (t) => {
+  const { file } = await fixture(t, [meta, {}]);
+  const a = await scanProvenance(file, {
+    harness: 'codex',
+    budgets: { maxEvents: 1 },
+  });
+  await assert.rejects(
+    () =>
+      scanProvenance(file, {
+        harness: 'codex',
+        cursor: a.cursor,
+        mappings: [{ from: 'C:/', to: 'D:/' }],
+      }),
+    /mappings changed/,
+  );
+});
+test('huge line stops with an unadvanced cursor', async (t) => {
+  const { file } = await fixture(t, [{ text: 'x'.repeat(10000) }]);
+  const a = await walkTape(file, { budgets: { maxLineBytes: 100 } }, () =>
+    assert.fail(),
+  );
+  assert.equal(a.stopReason, 'maxLineBytes');
+  assert.equal(a.endOffset, 0);
+});
+test('byte limit never parses a partial record', async (t) => {
+  const { file } = await fixture(t, [meta, { data: 'x'.repeat(200) }]);
+  const first = Buffer.byteLength(JSON.stringify(meta) + '\n');
+  let seen = 0;
+  const a = await walkTape(
+    file,
+    { budgets: { maxInputBytes: first + 10 } },
+    () => seen++,
+  );
+  assert.equal(seen, 1);
+  assert.equal(a.endOffset, first);
+  assert.equal(a.stopReason, 'maxInputBytes');
+});
+test('malformed input remains an explicit coverage gap', async (t) => {
+  const { file } = await fixture(t, [meta, '{broken']);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(a.coverage.complete, true);
+  assert.equal(a.gaps[0].kind, 'malformed-json');
+});
+test('compressed input is refused, not mistaken for empty JSONL', async () => {
+  await assert.rejects(
+    () => walkTape('some.jsonl.zst', {}, () => {}),
+    /Compressed input unsupported/,
+  );
+});
+test('Write remains ambiguous and failed writes remain failed', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('w', 'Write', { file_path: 'out.md' }),
+    result('w', { exit_code: 2 }),
+  ]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(a.events.at(-1).action, 'write');
+  assert.equal(a.events.at(-1).outcome, 'failed');
+  assert.ok(!a.events.some((e) => e.action === 'create'));
+});
+test('explicit new-file patch and tool success establish create evidence', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    {
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        call_id: 'p',
+        name: 'apply_patch',
+        input: '*** Begin Patch\n*** Add File: new.txt\n+x\n*** End Patch',
+      },
+    },
+    {
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call_output',
+        call_id: 'p',
+        output: 'Success. Updated the following files:\nA new.txt',
+      },
+    },
+  ]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(a.events.at(-1).evidence, 'explicit-tool-success');
+  assert.equal(a.events.at(-1).action, 'create');
+});
+test('Claude tool requests correlate with results and cwd', async (t) => {
+  const { file } = await fixture(t, [
+    {
+      sessionId: 'claude-one',
+      cwd: '/office/a',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'c',
+            name: 'Read',
+            input: { file_path: 'docs/x' },
+          },
+        ],
+      },
+    },
+    {
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'c', content: 'ok' }],
+      },
+    },
+  ]);
+  const a = await scanProvenance(file, { harness: 'claude-code' });
+  assert.equal(a.events.at(-1).resolvedPath, '/office/a/docs/x');
+  assert.equal(a.events.at(-1).evidence, 'explicit-tool-success');
+});
+test('opaque nested tool wrappers are a gap rather than a completeness claim', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('x', 'functions.exec', {
+      code: 'await tools.exec_command({cmd:"anything"})',
+    }),
+  ]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.ok(a.gaps.some((e) => e.kind === 'unsupported-or-opaque-tool'));
+});
+test('shell operations remain inferred even with a successful exit', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('s', 'exec_command', {
+      cmd: 'Get-Content -LiteralPath "C:\\Office\\a.md"',
+    }),
+    result('s', { exit_code: 0 }),
+  ]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(
+    a.events.find((e) => e.action === 'read' && e.outcome === 'succeeded')
+      .evidence,
+    'inferred-shell',
+  );
+});
+test('environment variables and unresolved bases remain unresolved', () => {
+  assert.equal(resolveReference('$HOME/a', '/office').resolvedPath, null);
+  assert.equal(resolveReference('a', null).resolvedPath, null);
+  assert.equal(
+    resolveReference('C:\\Office\\a', 'C:\\x', [
+      { from: 'C:/Office', to: 'D:/Office' },
+    ]).resolvedPath,
+    'D:/Office/a',
+  );
+});
+test('cross-page selection replaces requested evidence with its result', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'a' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const a = await scanProvenance(file, {
+      harness: 'codex',
+      budgets: { maxEvents: 2 },
+    }),
+    b = await scanProvenance(file, { harness: 'codex', cursor: a.cursor });
+  const selection = {
+    defaultAction: 'omit',
+    conflicts: 'error',
+    allowedSourceRoots: ['C:/Office'],
+    rules: [
+      {
+        id: 'read',
+        match: {
+          actionsAny: ['read'],
+          actionsNone: ['edit', 'write'],
+          evidence: ['explicit-tool-success'],
+        },
+        extent: { mode: 'explicit', maxDepth: 0 },
+        binding: { action: 'copy' },
+      },
+    ],
+  };
+  const preview = compileSelection([a, b], selection);
+  assert.equal(preview.selected.length, 1);
+  assert.equal(preview.selected[0].evidence.length, 1);
+  assert.equal(preview.executionReady, false);
+});
+test('incompatible action rules report conflicts rather than picking silently', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'a' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const page = await scanProvenance(file, { harness: 'codex' });
+  const rule = {
+    match: {
+      actionsAny: ['read'],
+      actionsNone: [],
+      evidence: ['explicit-tool-success'],
+    },
+    extent: { mode: 'explicit', maxDepth: 0 },
+    binding: { action: 'copy' },
+  };
+  const p = compileSelection([page], {
+    defaultAction: 'omit',
+    conflicts: 'error',
+    allowedSourceRoots: ['C:/Office'],
+    rules: [
+      { ...rule, id: 'one' },
+      { ...rule, id: 'two', binding: { action: 'symlink' } },
+    ],
+  });
+  assert.equal(p.conflicts.length, 1);
+  assert.equal(p.selected.length, 0);
+});
+test('ambient inventory exposes fingerprints without copying config contents or running hooks', async (t) => {
+  const { dir } = await fixture(t, []);
+  await fs.mkdir(path.join(dir, '.claude/hooks'), { recursive: true });
+  await fs.writeFile(path.join(dir, '.claude/CLAUDE.md'), 'machine A');
+  await fs.writeFile(
+    path.join(dir, '.claude/hooks/do-not-run.js'),
+    'throw new Error("must not execute")',
+  );
+  await fs.writeFile(
+    path.join(dir, '.claude/auth.json'),
+    'private authentication',
+  );
+  const inventory = await inventoryAmbient(dir);
+  assert.equal(inventory.records.length, 2);
+  assert.equal(inventory.hooksExecuted, false);
+  assert.ok(!JSON.stringify(inventory).includes('machine A'));
+  assert.ok(!inventory.records.some((r) => r.relative.endsWith('auth.json')));
+  assert.match(
+    reconciliationBrief(
+      inventory,
+      inventory,
+      compareAmbient(inventory, inventory),
+    ),
+    /reasoning task/,
+  );
+});
+test('ambient byte limit yields a gap and no false whole-home completeness', async (t) => {
+  const { dir } = await fixture(t, []);
+  await fs.writeFile(path.join(dir, 'AGENTS.md'), 'x'.repeat(100));
+  const a = await inventoryAmbient(dir, { maxBytes: 10 });
+  assert.equal(a.complete, false);
+  assert.equal(a.records.length, 0);
+  assert.equal(a.gaps[0].kind, 'maxBytes');
+});
+test('recorded source policy snapshot is fingerprinted but not dumped', async (t) => {
+  const { file } = await fixture(t, [meta]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(a.events[0].eventKind, 'recorded-policy-snapshot');
+  assert.ok(!JSON.stringify(a.events).includes('historical source policy'));
+});
+test('literal nested tool references are statically extracted without evaluating JS', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('x', 'functions.exec', {
+      code: 'globalThis.seshMustNotExecute = true; if(false) await tools.apply_patch("*** Add File: candidate.txt\\n+x");',
+    }),
+  ]);
+  const a = await scanProvenance(file, { harness: 'codex' });
+  assert.equal(globalThis.seshMustNotExecute, undefined);
+  const ref = a.events.find((e) => e.action === 'create');
+  assert.equal(ref.evidence, 'static-wrapper-reference');
+  assert.equal(ref.executionVerified, false);
+  assert.ok(a.gaps.some((e) => e.kind === 'wrapper-execution-not-verified'));
+});
+test('ambient settings directories are not assumed to be historical effective policy', async (t) => {
+  const { dir } = await fixture(t, []);
+  await fs.writeFile(path.join(dir, 'CLAUDE.md'), 'source machine policy');
+  const a = await inventoryAmbient(dir);
+  assert.equal(a.settingsApplied, false);
+  assert.match(
+    reconciliationBrief(a, a, compareAmbient(a, a)),
+    /not proof of which versions were active/,
+  );
+});
+test('coverage is complete only for a contiguous whole-checkpoint page set', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'a' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const a = await scanProvenance(file, {
+      harness: 'codex',
+      budgets: { maxEvents: 2 },
+    }),
+    b = await scanProvenance(file, { harness: 'codex', cursor: a.cursor });
+  assert.equal(assessCoverage([b]), false);
+  assert.equal(assessCoverage([a, b]), true);
+  assert.throws(() => assessCoverage([a, a]), /out-of-order/);
+  assert.throws(() => assessCoverage([b, a]), /out-of-order/);
+});
+test('root containment respects drive and component boundaries', () => {
+  assert.equal(contains('D:/Office', 'D:/Office/Agent/a'), true);
+  assert.equal(contains('D:/Office', 'D:/OfficeElse/a'), false);
+  assert.equal(contains('D:/Office', 'D:/Office/../other'), false);
+  assert.equal(contains('D:/Office', 'C:/Office/a'), false);
+});
+test('selector excludes candidate paths outside explicitly allowed roots', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'C:/Other/a' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const page = await scanProvenance(file, { harness: 'codex' });
+  const p = compileSelection([page], {
+    defaultAction: 'omit',
+    conflicts: 'error',
+    allowedSourceRoots: ['C:/Office'],
+    rules: [],
+  });
+  assert.equal(p.outOfScope.length, 1);
+  assert.equal(p.selected.length, 0);
+});
+test('selector rejects widening a folder anchor outside approved roots', () => {
+  assert.throws(
+    () =>
+      compileSelection([], {
+        defaultAction: 'omit',
+        conflicts: 'error',
+        allowedSourceRoots: ['D:/Office'],
+        rules: [
+          {
+            id: 'a',
+            extent: {
+              mode: 'tree',
+              maxDepth: 2,
+              anchor: 'explicit-root',
+              root: 'D:/',
+            },
+            binding: { action: 'copy' },
+          },
+        ],
+      }),
+    /outside allowed/,
+  );
+});
+test('ambient comparison preserves destination-only policy as a visible category', () => {
+  const a = { records: [] },
+    b = {
+      records: [
+        {
+          relative: 'AGENTS.md',
+          path: 'C:/home/AGENTS.md',
+          sha256: 'abc',
+          kind: 'user-instructions',
+        },
+      ],
+    };
+  assert.equal(compareAmbient(a, b)[0].status, 'destination-only');
+  assert.equal(
+    compareAmbient(a, b)[0].decision,
+    'preserve-current-unless-reasoned-change',
+  );
+});
+test('duplicate identical Claude requests are recorded without inventing two successful operations', async (t) => {
+  const r = {
+    sessionId: 'parent',
+    cwd: '/work',
+    message: {
+      content: [
+        {
+          type: 'tool_use',
+          id: 'duplicate',
+          name: 'Read',
+          input: { file_path: 'a' },
+        },
+      ],
+    },
+  };
+  const { file } = await fixture(t, [
+    r,
+    r,
+    {
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'duplicate', content: 'ok' },
+        ],
+      },
+    },
+  ]);
+  const p = await scanProvenance(file, { harness: 'claude-code' });
+  assert.ok(p.gaps.some((g) => g.kind === 'duplicate-identical-tool-request'));
+  assert.equal(p.events.filter((e) => e.outcome === 'succeeded').length, 1);
+});
+test('contradictory duplicate requests do not receive a fabricated success attribution', async (t) => {
+  const r = (target) => ({
+    sessionId: 'p',
+    cwd: '/work',
+    message: {
+      content: [
+        {
+          type: 'tool_use',
+          id: 'duplicate',
+          name: 'Read',
+          input: { file_path: target },
+        },
+      ],
+    },
+  });
+  const { file } = await fixture(t, [
+    r('a'),
+    r('b'),
+    {
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'duplicate', content: 'ok' },
+        ],
+      },
+    },
+  ]);
+  const p = await scanProvenance(file, { harness: 'claude-code' });
+  assert.ok(p.gaps.some((g) => g.kind === 'ambiguous-result-correlation'));
+  assert.equal(p.events.filter((e) => e.outcome === 'succeeded').length, 0);
+});
+test('Claude local-agent identity remains scoped to its parent session and source store', async (t) => {
+  const { file } = await fixture(t, [
+    {
+      sessionId: 'parent',
+      agentId: 'local-one',
+      isSidechain: true,
+      cwd: '/work',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'r',
+            name: 'Read',
+            input: { file_path: 'a' },
+          },
+        ],
+      },
+    },
+  ]);
+  const p = await scanProvenance(file, {
+    harness: 'claude-code',
+    sourceStoreId: 'cold-store',
+  });
+  assert.equal(p.events[0].sessionId, 'parent');
+  assert.equal(p.events[0].localAgentId, 'local-one');
+  assert.equal(p.events[0].sourceStoreId, 'cold-store');
+});
+test('recorded Agent result identifiers remain distinct from verified live native handles', async (t) => {
+  const { file } = await fixture(t, [
+    {
+      sessionId: 'parent',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'spawn',
+            name: 'Agent',
+            input: { name: 'helper' },
+          },
+        ],
+      },
+    },
+    {
+      tool_use_result: { agentId: 'local-child' },
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'spawn', content: 'done' },
+        ],
+      },
+    },
+  ]);
+  const p = await scanProvenance(file, { harness: 'claude-code' });
+  const e = p.events.find((e) => e.eventKind === 'spawn-result');
+  assert.equal(e.childLocalAgentId, 'local-child');
+  assert.equal(e.nativeRelationshipVerified, false);
+});
+test('WSL paths require explicit namespace mapping rather than accidental Windows rooting', () => {
+  assert.equal(
+    resolveReference('/mnt/c/Office/a', 'C:/Office').resolvedPath,
+    null,
+  );
+  assert.equal(
+    resolveReference('/mnt/c/Office/a', 'C:/Office', [
+      { from: '/mnt/c', to: 'D:/' },
+    ]).resolvedPath,
+    'D:/Office/a',
+  );
+  assert.equal(resolveReference('/tmp/a', 'C:/Office').resolvedPath, null);
+});
+test('explicit negative path filters can separate preserved tapes from workspace selection', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    call('r', 'Read', { file_path: 'C:/Office/history/a.jsonl' }),
+    result('r', { exit_code: 0 }),
+  ]);
+  const p = await scanProvenance(file, { harness: 'codex' });
+  const preview = compileSelection([p], {
+    defaultAction: 'omit',
+    conflicts: 'error',
+    allowedSourceRoots: ['C:/Office'],
+    rules: [
+      {
+        id: 'read',
+        match: {
+          actionsAny: ['read'],
+          actionsNone: [],
+          evidence: ['explicit-tool-success'],
+          pathsNone: ['C:/Office/history/**'],
+        },
+        extent: { mode: 'explicit', maxDepth: 0 },
+        binding: { action: 'copy' },
+      },
+    ],
+  });
+  assert.equal(preview.selected.length, 0);
+});

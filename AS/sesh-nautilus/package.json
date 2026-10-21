@@ -1,6 +1,6 @@
 {
   "name": "sesh-nautilus",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Reconstruct compaction/context-boundary structure dropped by cross-harness session converters (e.g. Codex to Claude Code).",
   "bin": {
     "sesh-nautilus": "./bin/sesh-nautilus.js"
@@ -26,7 +26,7 @@
   "license": "MIT",
   "author": "DarienSirius",
   "dependencies": {
-    "@tools-of/sesh-evidence": "0.2.0"
+    "@tools-of/sesh-evidence": "0.2.1"
   },
   "files": [
     "bin",

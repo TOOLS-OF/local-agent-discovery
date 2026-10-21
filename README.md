@@ -8,6 +8,16 @@ Each implementation lives below `AS/<tool-name>/`. Discovery commands remain
 read-only; delivery, reconstruction, and launch tools document their own roles
 and side effects in their respective directories.
 
-[`sesh-beaver`](AS/sesh-beaver/README.md) is the planned agent-habitat transfer
-coordinator. Its current configuration model and examples are design artifacts;
-no general transfer executor or installed command is provided yet.
+The transfer-preparation tools compose focused responsibilities:
+
+| Tool | Current role |
+|---|---|
+| [sesh-bloodhound](AS/sesh-bloodhound/README.md) | Bounded recorded file/tool provenance, turn/chamber links and coverage gaps |
+| [sesh-nautilus](AS/sesh-nautilus/README.md) | History inspection, native Codex candidate projection, legacy boundary reconstruction |
+| [agent-relocator](AS/agent-relocator/README.md) | Evidence selection, bounded folder previews and ambient-policy handoff |
+| [sesh-beaver](AS/sesh-beaver/README.md) | Filesystem realization contract; general executor pending |
+
+The deterministic preparation commands do not import or launch agents. See the
+[workflow guide](docs/transfer-model/PREPARATION_WORKFLOW.md) for supported
+operations and gaps, and [CONTRIBUTING.md](CONTRIBUTING.md) for isolated package
+validation, review and promotion policy.

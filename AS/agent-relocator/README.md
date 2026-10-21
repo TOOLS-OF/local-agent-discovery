@@ -1,10 +1,12 @@
-# Agent relocator: first sprint
+# Agent relocator
 
-Humanoid coordination trade, with a deterministic CLI for read-only preparation. This is not an installed agent persona or a general transfer executor.
+Humanoid coordination trade with deterministic preparation commands, version 0.2.1. A general filesystem/session transfer executor and installed agent persona remain pending.
 
-- `ambient`: bounded source/destination home inventory, hash comparison and agent-local reconciliation brief. It copies no settings, includes no configuration contents, and executes no hooks. Follow the generated references after transfer and reason about changes; current source files do not prove historical activation.
-- `select`: compile bloodhound page evidence with relocation-request selection predicates into a preview. Explicit/folder/tree extents are retained as requests; directory expansion and filesystem realization remain unimplemented, so every preview stays unready.
+- `ambient`: bounded source/destination guidance, skills/hooks/settings fingerprints, comparison, and agent-local reconciliation brief. Copies no settings and executes no hooks. Ancestor links are not followed.
+- `select`: compile provenance pages with action/evidence/session/path filters and an optional independent last-N-turn window. Unknown or incomplete evidence remains explicit.
+- `expand`: metadata-only exact-file, immediate-folder or recursive-tree previews with allowed roots, exclusions, budgets, conflicts and seed/event joins. No destination workspaces are created.
+- `expand-tape`: bounded lossless gzip/Zstandard snapshot with full compressed/decoded hashes. Refuses existing output; source remains unchanged.
 
-The package depends on the sibling `@tools-of/sesh-evidence@0.1.0`. Install both packed artifacts together into an isolated prefix for development; no source worktree should become the global command installation. See docs/transfer-model/SPRINT_01.md for validation and gaps.
+Run `agent-relocator --help` for flags. The required sibling dependency is `@tools-of/sesh-evidence@0.2.1`; validate the complete tarball closure through the [contributor workflow](../../CONTRIBUTING.md). Do not point a global command at a mutable worktree.
 
-See [Sprint 02](../../docs/transfer-model/SPRINT_02.md) for turn/chamber provenance, independent history/access windows, bounded folder expansion, and projection limitations.
+See the [preparation guide](../../docs/transfer-model/PREPARATION_WORKFLOW.md), [Sprint 02](../../docs/transfer-model/SPRINT_02.md), and [Git/sidecar contract](../../docs/transfer-model/GIT_AND_CREATED_TASKS.md). Schema-valid Git or relationship plans are not executable importers.

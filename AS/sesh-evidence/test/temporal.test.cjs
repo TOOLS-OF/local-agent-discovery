@@ -1,19 +1,247 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
-const {scanProvenance,compileSelection,expandResourcePreview}=require('..');
-async function fixture(t,records){const dir=await fs.mkdtemp(path.join(os.tmpdir(),'sesh-temporal-'));t.after(async()=>{assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));assert.ok(path.basename(dir).startsWith('sesh-temporal-'));assert.equal((await fs.lstat(dir)).isSymbolicLink(),false);await fs.rm(dir,{recursive:true});});const file=path.join(dir,'tape.jsonl');await fs.writeFile(file,records.map(JSON.stringify).join('\n')+'\n');return {dir,file};}
-const meta={type:'session_meta',payload:{id:'s',cwd:'C:/work'}};
-const start=id=>({type:'event_msg',payload:{type:'task_started',turn_id:id}}),end=id=>({type:'event_msg',payload:{type:'task_complete',turn_id:id}});
-const call=(id,file)=>({type:'response_item',payload:{type:'function_call',name:'Read',call_id:id,arguments:JSON.stringify({path:file})}}),result=id=>({type:'response_item',payload:{type:'function_call_output',call_id:id,output:'{"exit_code":0}'}});
-function request(file,n,completion='observed'){return {temporal:{sourceTape:file,sessionId:'s',localAgentId:null,lastTurns:n,completion},defaultAction:'omit',conflicts:'error',allowedSourceRoots:['C:/work'],rules:[{id:'r',match:{actionsAny:['read'],actionsNone:['edit','write'],evidence:['explicit-tool-success']},extent:{mode:'explicit',anchor:'referenced-path',maxDepth:0},binding:{action:'copy'}}]};}
-test('turn attribution survives page and compaction boundaries; access and history windows stay independent',async t=>{
- const {file}=await fixture(t,[meta,start('one'),call('a','old'),result('a'),end('one'),start('two'),call('b','new'),{type:'compacted',payload:{}},{type:'turn_context',payload:{turn_id:'two'}},result('b'),end('two'),start('three'),call('c','pending')]);
- const pages=[];let cursor;do{const p=await scanProvenance(file,{harness:'codex',cursor,budgets:{maxEvents:3}});pages.push(p);cursor=p.cursor;}while(cursor);
- const selected=compileSelection(pages,request(pages[0].coverage.checkpoint.realpath,2,'completed'));
- assert.deepEqual(selected.temporalWindow.turns.map(t=>t.id),['one','two']);assert.equal(selected.selected.length,2);
- const access=selected.selected.find(r=>r.path.endsWith('new')).evidence[0];assert.equal(access.turn.id,'two');assert.equal(access.chamber,0);assert.ok(access.resultSource.offset>access.source.offset);
- assert.equal(pages.flatMap(p=>p.events).filter(e=>e.eventKind==='turn-boundary'&&e.phase==='start').length,3);
- const observed=compileSelection(pages,request(pages[0].coverage.checkpoint.realpath,1));assert.equal(observed.temporalWindow.turns[0].id,'three');assert.equal(observed.selected.length,0);
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  fs = require('node:fs/promises'),
+  path = require('node:path'),
+  os = require('node:os');
+const {
+  scanProvenance,
+  compileSelection,
+  expandResourcePreview,
+} = require('..');
+async function fixture(t, records) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sesh-temporal-'));
+  t.after(async () => {
+    assert.equal(path.dirname(path.resolve(dir)), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(dir).startsWith('sesh-temporal-'));
+    assert.equal((await fs.lstat(dir)).isSymbolicLink(), false);
+    await fs.rm(dir, { recursive: true });
+  });
+  const file = path.join(dir, 'tape.jsonl');
+  await fs.writeFile(file, records.map(JSON.stringify).join('\n') + '\n');
+  return { dir, file };
+}
+const meta = { type: 'session_meta', payload: { id: 's', cwd: 'C:/work' } };
+const start = (id) => ({
+    type: 'event_msg',
+    payload: { type: 'task_started', turn_id: id },
+  }),
+  end = (id) => ({
+    type: 'event_msg',
+    payload: { type: 'task_complete', turn_id: id },
+  });
+const call = (id, file) => ({
+    type: 'response_item',
+    payload: {
+      type: 'function_call',
+      name: 'Read',
+      call_id: id,
+      arguments: JSON.stringify({ path: file }),
+    },
+  }),
+  result = (id) => ({
+    type: 'response_item',
+    payload: {
+      type: 'function_call_output',
+      call_id: id,
+      output: '{"exit_code":0}',
+    },
+  });
+function request(file, n, completion = 'observed') {
+  return {
+    temporal: {
+      sourceTape: file,
+      sessionId: 's',
+      localAgentId: null,
+      lastTurns: n,
+      completion,
+    },
+    defaultAction: 'omit',
+    conflicts: 'error',
+    allowedSourceRoots: ['C:/work'],
+    rules: [
+      {
+        id: 'r',
+        match: {
+          actionsAny: ['read'],
+          actionsNone: ['edit', 'write'],
+          evidence: ['explicit-tool-success'],
+        },
+        extent: { mode: 'explicit', anchor: 'referenced-path', maxDepth: 0 },
+        binding: { action: 'copy' },
+      },
+    ],
+  };
+}
+
+test(
+  'Windows folder aliases merge both seeds without a false source collision',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const { dir } = await fixture(t, []),
+      source = path.join(dir, 'MixedCase');
+    await fs.mkdir(source);
+    for (const name of ['a', 'b'])
+      await fs.writeFile(path.join(source, name), name);
+    const selected = ['a', 'b'].map((name, i) => ({
+      path: path.join(i ? source.toLowerCase() : source, name),
+      ruleId: 'r',
+      extent: { mode: 'folder', anchor: 'file-parent', maxDepth: 0 },
+      binding: { action: 'copy' },
+    }));
+    const result = await expandResourcePreview(selected, {
+      allowedSourceRoots: [source],
+      destinationRoot: path.join(dir, 'destination'),
+    });
+    assert.equal(result.complete, true);
+    assert.equal(result.expansionScopes.length, 1);
+    assert.equal(result.expansionScopes[0].seedIds.length, 2);
+    assert.equal(result.resources.filter((r) => r.kind === 'file').length, 2);
+  },
+);
+test('turn attribution survives page and compaction boundaries; access and history windows stay independent', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    start('one'),
+    call('a', 'old'),
+    result('a'),
+    end('one'),
+    start('two'),
+    call('b', 'new'),
+    { type: 'compacted', payload: {} },
+    { type: 'turn_context', payload: { turn_id: 'two' } },
+    result('b'),
+    end('two'),
+    start('three'),
+    call('c', 'pending'),
+  ]);
+  const pages = [];
+  let cursor;
+  do {
+    const p = await scanProvenance(file, {
+      harness: 'codex',
+      cursor,
+      budgets: { maxEvents: 3 },
+    });
+    pages.push(p);
+    cursor = p.cursor;
+  } while (cursor);
+  const selected = compileSelection(
+    pages,
+    request(pages[0].coverage.checkpoint.realpath, 2, 'completed'),
+  );
+  assert.deepEqual(
+    selected.temporalWindow.turns.map((t) => t.id),
+    ['one', 'two'],
+  );
+  assert.equal(selected.selected.length, 2);
+  const access = selected.selected.find((r) => r.path.endsWith('new'))
+    .evidence[0];
+  assert.equal(access.turn.id, 'two');
+  assert.equal(access.chamber, 0);
+  assert.ok(access.resultSource.offset > access.source.offset);
+  assert.equal(
+    pages
+      .flatMap((p) => p.events)
+      .filter((e) => e.eventKind === 'turn-boundary' && e.phase === 'start')
+      .length,
+    3,
+  );
+  const observed = compileSelection(
+    pages,
+    request(pages[0].coverage.checkpoint.realpath, 1),
+  );
+  assert.equal(observed.temporalWindow.turns[0].id, 'three');
+  assert.equal(observed.selected.length, 0);
 });
-test('turn-window selection refuses old evidence and partial tails',async t=>{const {file}=await fixture(t,[meta,start('one'),call('a','x'),result('a'),end('one')]);const p=await scanProvenance(file,{harness:'codex'}),r=request(p.coverage.checkpoint.realpath,10);assert.equal(compileSelection([p],r).temporalWindow.windowSatisfied,false);assert.throws(()=>compileSelection([{...p,turnIndexVersion:undefined}],r),/fresh turn-indexed/);const partial=await scanProvenance(file,{harness:'codex',budgets:{maxEvents:2}});assert.throws(()=>compileSelection([partial],r),/complete record coverage/);});
-test('Claude prompts are inferred turns; tool-result and summary envelopes are excluded',async t=>{const {file}=await fixture(t,[{type:'user',uuid:'u',sessionId:'s',cwd:'/work',message:{content:'question'}},{type:'assistant',message:{content:[{type:'tool_use',name:'Read',id:'c',input:{path:'x'}}]}},{type:'user',message:{content:[{type:'tool_result',tool_use_id:'c',content:'ok'}]}},{type:'user',isCompactSummary:true,message:{content:'summary'}}]);const p=await scanProvenance(file,{harness:'claude-code'});assert.equal(p.events.filter(e=>e.eventKind==='turn-boundary').length,1);assert.equal(p.events.findLast(e=>e.action==='read').turn.basis,'inferred-user-prompt');});
-test('shared folder expansion retains all seed events and distinguishes unaccessed siblings',async t=>{const {dir}=await fixture(t,[]);const folder=path.join(dir,'work');await fs.mkdir(folder);for(const name of ['a','b','extra'])await fs.writeFile(path.join(folder,name),name);const selected=['a','b'].map((name,i)=>({path:path.join(folder,name),ruleId:'r',evidence:[{sourceTape:'tape',source:{offset:i},chamber:i,turn:{id:`t${i}`}}],extent:{mode:'folder',anchor:'file-parent',maxDepth:0},binding:{action:'copy'}}));const p=await expandResourcePreview(selected,{allowedSourceRoots:[folder],destinationRoot:path.join(dir,'not-created')});assert.equal(p.expansionScopes.length,1);assert.equal(p.expansionScopes[0].seedIds.length,2);const extra=p.resources.find(r=>r.source.endsWith('extra'));assert.equal(extra.inclusion,'folder-expansion');assert.deepEqual(extra.directSeedIds,[]);assert.equal(extra.scopeIds[0],p.expansionScopes[0].id);assert.equal(p.seeds[1].evidence[0].turn.id,'t1');await assert.rejects(()=>fs.stat(path.join(dir,'not-created')),/ENOENT/);});
+test('turn-window selection refuses old evidence and partial tails', async (t) => {
+  const { file } = await fixture(t, [
+    meta,
+    start('one'),
+    call('a', 'x'),
+    result('a'),
+    end('one'),
+  ]);
+  const p = await scanProvenance(file, { harness: 'codex' }),
+    r = request(p.coverage.checkpoint.realpath, 10);
+  assert.equal(compileSelection([p], r).temporalWindow.windowSatisfied, false);
+  assert.throws(
+    () => compileSelection([{ ...p, turnIndexVersion: undefined }], r),
+    /fresh turn-indexed/,
+  );
+  const partial = await scanProvenance(file, {
+    harness: 'codex',
+    budgets: { maxEvents: 2 },
+  });
+  assert.throws(
+    () => compileSelection([partial], r),
+    /complete record coverage/,
+  );
+});
+test('Claude prompts are inferred turns; tool-result and summary envelopes are excluded', async (t) => {
+  const { file } = await fixture(t, [
+    {
+      type: 'user',
+      uuid: 'u',
+      sessionId: 's',
+      cwd: '/work',
+      message: { content: 'question' },
+    },
+    {
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', name: 'Read', id: 'c', input: { path: 'x' } },
+        ],
+      },
+    },
+    {
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: 'c', content: 'ok' }],
+      },
+    },
+    { type: 'user', isCompactSummary: true, message: { content: 'summary' } },
+  ]);
+  const p = await scanProvenance(file, { harness: 'claude-code' });
+  assert.equal(
+    p.events.filter((e) => e.eventKind === 'turn-boundary').length,
+    1,
+  );
+  assert.equal(
+    p.events.findLast((e) => e.action === 'read').turn.basis,
+    'inferred-user-prompt',
+  );
+});
+test('shared folder expansion retains all seed events and distinguishes unaccessed siblings', async (t) => {
+  const { dir } = await fixture(t, []);
+  const folder = path.join(dir, 'work');
+  await fs.mkdir(folder);
+  for (const name of ['a', 'b', 'extra'])
+    await fs.writeFile(path.join(folder, name), name);
+  const selected = ['a', 'b'].map((name, i) => ({
+    path: path.join(folder, name),
+    ruleId: 'r',
+    evidence: [
+      {
+        sourceTape: 'tape',
+        source: { offset: i },
+        chamber: i,
+        turn: { id: `t${i}` },
+      },
+    ],
+    extent: { mode: 'folder', anchor: 'file-parent', maxDepth: 0 },
+    binding: { action: 'copy' },
+  }));
+  const p = await expandResourcePreview(selected, {
+    allowedSourceRoots: [folder],
+    destinationRoot: path.join(dir, 'not-created'),
+  });
+  assert.equal(p.expansionScopes.length, 1);
+  assert.equal(p.expansionScopes[0].seedIds.length, 2);
+  const extra = p.resources.find((r) => r.source.endsWith('extra'));
+  assert.equal(extra.inclusion, 'folder-expansion');
+  assert.deepEqual(extra.directSeedIds, []);
+  assert.equal(extra.scopeIds[0], p.expansionScopes[0].id);
+  assert.equal(p.seeds[1].evidence[0].turn.id, 't1');
+  await assert.rejects(() => fs.stat(path.join(dir, 'not-created')), /ENOENT/);
+});

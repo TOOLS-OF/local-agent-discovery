@@ -1,0 +1,29 @@
+name: Transfer preparation tools
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Behavioral, schema and installed-package acceptance
+        shell: pwsh
+        run: ./scripts/validate-transfer-tools.ps1 -OutputRoot (Join-Path $env:RUNNER_TEMP 'sesh-validation')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-${{ matrix.os }}-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/sesh-validation/validation.json
+          if-no-files-found: ignore

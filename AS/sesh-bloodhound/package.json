@@ -1,6 +1,6 @@
 {
   "name": "sesh-bloodhound",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Bounded recorded file/tool provenance extraction",
   "bin": {
     "sesh-bloodhound": "bin/sesh-bloodhound.cjs"
@@ -10,7 +10,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@tools-of/sesh-evidence": "0.2.0"
+    "@tools-of/sesh-evidence": "0.2.1"
   },
   "engines": {
     "node": ">=20"

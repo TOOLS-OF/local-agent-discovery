@@ -1,23 +1,23 @@
 # Composed archaeology and relocation operations
 
-Design status: proposed interfaces and selection contract, not an implemented scan/transfer pipeline. This extends the transfer-unit model without turning beaver into an orchestrator. Preserve existing animal responsibilities and reuse their adapters. The request schema and synthetic example describe configuration, not installed commands or working harness capabilities.
+Status: bounded preparation commands are implemented; the complete realization/delivery/launch pipeline remains a design contract. This extends the transfer-unit model without turning beaver into an orchestrator. Preserve existing animal responsibilities and reuse their adapters. The request schema and synthetic example describe configuration, not installed commands or working harness capabilities.
 
-[Sprint 01](SPRINT_01.md) now implements bounded plain-JSONL bloodhound scanning, evidence-only selection and ambient-policy reconciliation preparation. The full scan/expansion/projection/realization/delivery pipeline below remains the target contract; implementation status is reported separately.
+[Sprint 02](SPRINT_02.md) adds turn/chamber provenance, independent access windows, bounded expansion and native history candidates to Sprint 01. See the current [workflow guide](PREPARATION_WORKFLOW.md). The full scan/expansion/projection/realization/delivery pipeline below remains the target contract; implementation status is reported separately.
 
 ## Animals and trades
 
 | Piece | One responsibility | Status and seam |
 | --- | --- | --- |
 | sesh-hound | Locate sessions and stores | Existing discovery tools; offline source-root behavior needs adapter validation |
-| sesh-bloodhound | Extract recorded provenance events from transcripts | Open design/develop issues; reported whodunnit prototype not yet located or validated in this investigation |
+| sesh-bloodhound | Extract recorded provenance events from transcripts | Implemented bounded scanner; reported whodunnit prototype still requires reconciliation if recovered |
 | sesh-bee | Render readable dialogue | Existing extract; omits tool blocks, so it cannot replace bloodhound evidence |
-| sesh-nautilus | Describe and transform context-chamber structure | Existing Codex boundary extraction / Claude insertion; propose boundary indexing and valid retained-chamber projection here |
+| sesh-nautilus | Describe and transform context-chamber structure | Implemented bounded inspection and Codex candidate projection; legacy Claude insertion; continuation and Claude parent-chain projection remain unvalidated/unsupported |
 | sesh-beaver | Realize a resolved filesystem resource graph | Proposed copy/link/rebuild binding executor, integrity and owned-resource cleanup; no session search, migration policy, history surgery or launch orchestration |
 | sesh-stork | Deliver a finished tape into a target store and verify delivery | Existing Claude delivery adapter; file supplied as-is; does not choose retained history |
 | sesh-falcon | Apply supported launch configuration | Existing launch tools; proposed explicit multi-root adapter validation |
 | agent-sleuth | Interpret discovery/provenance evidence | Existing persona design #25; commands hound and bloodhound |
 | agent-archaeologist | Interpret context continuity and knowledge carried across boundaries | Existing persona design #26; composes provenance and nautilus chamber evidence |
-| agent-relocator | Scope and coordinate system relocation | Proposed humanoid trade; composes sleuth/archaeologist work, beaver, stork, falcon and acceptance checks |
+| agent-relocator | Scope and coordinate system relocation | Implemented deterministic preparation CLI; full orchestration and execution remain pending |
 | agent-auditor | Judge evidence against the requested policy | Existing persona design #34; separate conclusions for coverage, history, resources, instructions and cleanup |
 
 The trade names are provisional. These are role specifications, not created agent sessions or installed personas. A person or agent can fulfill several trades. The animal registry should reference the contracts; this document does not replace the proposed sesh-king governance spec (#22).

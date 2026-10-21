@@ -1,6 +1,6 @@
 {
   "name": "@tools-of/agent-relocator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only evidence selection and ambient reconciliation preparation for a relocation trade",
   "bin": {
     "agent-relocator": "bin/agent-relocator.cjs"
@@ -10,7 +10,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@tools-of/sesh-evidence": "0.2.0"
+    "@tools-of/sesh-evidence": "0.2.1"
   },
   "engines": {
     "node": ">=20"
