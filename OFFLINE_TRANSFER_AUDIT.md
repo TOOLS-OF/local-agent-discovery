@@ -52,3 +52,25 @@ converted artifact.
 
 No raw user logs, credentials, local indexes, or private manifests belong in this
 repository. This audit does not claim the proposed implementation has landed.
+
+## Bounded recovery experiment
+
+A three-session family was successfully continued on a second Windows host using
+separate runtime copies and the installed app-server protocol. The workflow first
+validated a parent resume by explicit rollout path in an isolated harness home.
+On the live destination, `thread/read` indexed each copied family member before
+the parent and children were resumed in order. Attempting to resume an unindexed
+child failed despite the tape existing; indexing it and loading the parent first
+allowed the original native child to resume. A parent validation message then
+reached both exact existing children through native handles. This is evidence
+for that bounded migration, not a universal cross-version restart guarantee.
+
+One child tape can contain both its own opening session metadata and inherited
+parent metadata later in the file. Do not overwrite a child's identity with a
+later inherited parent ID, or flatten its native source relationship to make a
+peer session easier to import. Preserve raw tapes and use official runtime
+operations to reconstruct state where possible.
+
+The current history renderer emitted warnings for some historical tool items
+with unknown turn IDs. Keep complete raw evidence and distinguish readable
+recent history from verified full historical UI fidelity.
