@@ -74,6 +74,8 @@ For a fork, record the common historical prefix and each future append destinati
 
 ## Experiments for the reusable planner
 
+The [Windows Codex pilot](WINDOWS_CODEX_PILOT.md) records measured copy, junction, fork, read-only, writer and lifecycle results. Its successful copied fallbacks must not be counted as successful linked-history tests. The [transfer-unit contract](TRANSFER_UNIT.md) defines journaled checkpoints and system composition.
+
 Keep test cases and outcomes by configuration, harness version, OS, and filesystem. At minimum compare: exclusive copied continuation at original paths; exclusive copied continuation at remapped paths; an independent fork with copied workspace; a fork with read-only shared references; a fork with a shared read/write workspace; and coordinated extended access where a harness advertises support. Unsupported combinations remain visible in the matrix with their blocker and required capability, rather than disappearing from the design.
 
 For each case, measure four independent outcomes: **history continuation**, **resource coupling**, **tool/path compatibility**, and **behavioral instruction changes**. Include source disappearance, source reactivation, relocation of a linked target, restart, and concurrent access only as explicit planned experiments against disposable copies.

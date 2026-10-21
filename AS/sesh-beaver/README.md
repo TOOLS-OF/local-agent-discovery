@@ -8,6 +8,8 @@ Coordinate discovery, dependency manifests, explicit continuity/fork choices, pe
 
 The [configuration-space contract](../../docs/transfer-model/CONFIGURATION_SPACE.md) includes nine candidate profiles and a JSON schema. Its checks establish structural consistency, not runtime support.
 
+The [transfer-unit contract](../../docs/transfer-model/TRANSFER_UNIT.md) defines one journaled agent transfer and how system manifests compose units, native relationships, and shared resources. A completed filesystem copy, a continued conversation, a portable workspace, and cleaned scratch are separate outcomes.
+
 ## Place in the kingdom
 
 - `sesh-hound` supplies discovery evidence.
