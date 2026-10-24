@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "name": "exclusive-remapped-paths",
+  "sourceStore": "source-machine:codex:store-a",
+  "destinationStore": "destination-machine:codex:store-b",
+  "continuity": {
+    "intent": "exclusive-continuation",
+    "sourceWriter": "stopped"
+  },
+  "identity": {
+    "policy": "retain-exclusive",
+    "sourceSession": "example-parent",
+    "destinationSession": "example-parent"
+  },
+  "history": {
+    "binding": "snapshot-copy",
+    "writerAuthority": "destination-exclusive",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "remapped",
+    "namespace": "host",
+    "requestedPath": "C:/AgentSystems/Agent_A",
+    "extent": "selected-closure"
+  },
+  "instructions": "overlay",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "snapshot-copy",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": null,
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/AgentSystems/Agent_A"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "snapshot-copy",
+      "targetRole": "destination-working",
+      "access": "read-write",
+      "sharingGroup": null,
+      "sourcePath": "source-store:/sessions/example-parent",
+      "destinationPath": "destination-store:/sessions/example-parent"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    },
+    {
+      "consumer": "old absolute paths",
+      "basis": "absolute",
+      "resolution": "configure",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unneeded",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Planning preset; checkpoint, dependency closure, namespace collisions, and adapter acceptance need verification."
+  ]
+}

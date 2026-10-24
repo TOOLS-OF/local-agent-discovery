@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "name": "extended-access-candidate",
+  "sourceStore": "coordinated-service:example-lineage",
+  "destinationStore": "coordinated-service:example-lineage",
+  "continuity": {
+    "intent": "extended-access",
+    "sourceWriter": "active"
+  },
+  "identity": {
+    "policy": "retain-namespaced",
+    "sourceSession": "example-parent",
+    "destinationSession": "example-parent"
+  },
+  "history": {
+    "binding": "coordinated-service",
+    "writerAuthority": "harness-coordinated",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "remapped",
+    "namespace": "host",
+    "requestedPath": "C:/AgentSystems/Agent_A",
+    "extent": "selected-closure"
+  },
+  "instructions": "overlay",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "service-reference",
+      "targetRole": "shared-live",
+      "access": "read-write",
+      "sharingGroup": "coordinated-agent-workspace",
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/AgentSystems/Agent_A"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "service-reference",
+      "targetRole": "shared-live",
+      "access": "read-write",
+      "sharingGroup": "coordinated-agent-history",
+      "sourcePath": "source-store:/sessions/example-parent",
+      "destinationPath": "coordinated-service:/example-lineage"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    },
+    {
+      "consumer": "old absolute paths",
+      "basis": "absolute",
+      "resolution": "configure",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unknown",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Candidate only: a harness/service must demonstrate coordinated history and writer semantics. No such adapter has been validated here."
+  ]
+}

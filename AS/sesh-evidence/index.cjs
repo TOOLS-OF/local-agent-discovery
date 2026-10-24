@@ -1,0 +1,9 @@
+module.exports = {
+  ...require('./lib/tape.cjs'),
+  ...require('./lib/provenance.cjs'),
+  ...require('./lib/selection.cjs'),
+  ...require('./lib/ambient.cjs'),
+  ...require('./lib/history.cjs'),
+  ...require('./lib/resources.cjs'),
+  ...require('./lib/expansion.cjs'),
+};

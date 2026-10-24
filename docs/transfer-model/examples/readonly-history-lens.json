@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "name": "readonly-history-lens",
+  "sourceStore": "source-machine:codex:store-a",
+  "destinationStore": "destination-machine:codex:store-b",
+  "continuity": {
+    "intent": "archive",
+    "sourceWriter": "active"
+  },
+  "identity": {
+    "policy": "retain-namespaced",
+    "sourceSession": "example-parent",
+    "destinationSession": "example-parent"
+  },
+  "history": {
+    "binding": "snapshot-copy",
+    "writerAuthority": "none",
+    "resourceId": "primary-history"
+  },
+  "cwd": {
+    "logicalPolicy": "original",
+    "namespace": "host",
+    "requestedPath": "C:/Office/Agent_A",
+    "extent": "selected-closure"
+  },
+  "instructions": "preserve",
+  "tools": "pin-source",
+  "topology": "require-verified-native",
+  "resources": [
+    {
+      "id": "agent-workspace",
+      "kind": "workspace",
+      "materialization": "snapshot-copy",
+      "targetRole": "preserved-evidence",
+      "access": "read-only",
+      "sharingGroup": null,
+      "sourcePath": "C:/Office/Agent_A",
+      "destinationPath": "C:/Office/Agent_A"
+    },
+    {
+      "id": "primary-history",
+      "kind": "history",
+      "materialization": "snapshot-copy",
+      "targetRole": "preserved-evidence",
+      "access": "read-only",
+      "sharingGroup": null,
+      "sourcePath": "source-store:/sessions/example-parent",
+      "destinationPath": "destination-store:/sessions/example-parent"
+    }
+  ],
+  "references": [
+    {
+      "consumer": "workspace-relative references",
+      "basis": "cwd-relative",
+      "resolution": "preserve-layout",
+      "status": "unverified"
+    }
+  ],
+  "capabilities": {
+    "historyCoordination": "unneeded",
+    "evidence": [],
+    "requiredAcceptance": "unverified"
+  },
+  "executionReady": false,
+  "blockers": [
+    "Verify a consistent snapshot and read-only enforcement; no continuation writer is authorized by this profile."
+  ]
+}

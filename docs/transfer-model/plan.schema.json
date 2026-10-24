@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Proposed agent transfer plan",
+  "description": "Configuration contract only. Structural validation does not execute or certify a transfer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "sourceStore", "destinationStore", "continuity", "identity", "history", "cwd", "instructions", "tools", "topology", "resources", "references", "capabilities", "executionReady", "blockers"],
+  "properties": {
+    "version": {"const": 1},
+    "name": {"type": "string", "minLength": 1},
+    "sourceStore": {"type": "string", "minLength": 1},
+    "destinationStore": {"type": "string", "minLength": 1},
+    "continuity": {
+      "type": "object", "additionalProperties": false, "required": ["intent", "sourceWriter"],
+      "properties": {
+        "intent": {"enum": ["exclusive-continuation", "fork", "extended-access", "archive"]},
+        "sourceWriter": {"enum": ["stopped", "active", "unknown"]}
+      }
+    },
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["policy", "sourceSession", "destinationSession"],
+      "properties": {
+        "policy": {"enum": ["retain-exclusive", "native-fork-id", "retain-namespaced"]},
+        "sourceSession": {"type": "string", "minLength": 1},
+        "destinationSession": {"type": ["string", "null"]}
+      }
+    },
+    "history": {
+      "type": "object", "additionalProperties": false, "required": ["binding", "writerAuthority", "resourceId"],
+      "properties": {
+        "binding": {"enum": ["snapshot-copy", "native-fork", "linked-live-file", "shared-live-store", "coordinated-service", "none"]},
+        "writerAuthority": {"enum": ["destination-exclusive", "single-owner-lease", "harness-coordinated", "none"]},
+        "resourceId": {"type": "string", "minLength": 1}
+      }
+    },
+    "cwd": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalPolicy", "namespace", "requestedPath", "extent"],
+      "properties": {
+        "logicalPolicy": {"enum": ["original", "remapped"]},
+        "namespace": {"enum": ["host", "isolated"]},
+        "requestedPath": {"type": "string", "minLength": 1},
+        "extent": {"enum": ["entire-source-cwd", "selected-closure", "selected-unverified"]}
+      }
+    },
+    "instructions": {"enum": ["preserve", "overlay", "replace"]},
+    "tools": {"enum": ["pin-source", "validate-target", "mixed-explicit", "unavailable"]},
+    "repositoryRestoreRef": {"type":"string","minLength":1,"description":"Git restoration request validated separately with git-restore.schema.json; does not imply execution support."},
+    "ambientPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sourceInventoryRef", "destinationInventoryRef", "recordedPolicyRefs", "agentGuidanceRef", "reconciliation", "automaticApplication", "hookActivation"],
+      "properties": {
+        "sourceInventoryRef": {"type": "string", "minLength": 1},
+        "destinationInventoryRef": {"type": "string", "minLength": 1},
+        "recordedPolicyRefs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "agentGuidanceRef": {"type": "string", "minLength": 1},
+        "reconciliation": {"enum": ["pending-agent-review", "partially-reconciled", "reconciled", "deferred"]},
+        "automaticApplication": {"const": false},
+        "hookActivation": {"const": "individual-review-required"}
+      }
+    },
+    "topology": {"enum": ["history-only", "request-native", "require-verified-native"]},
+    "resources": {"type": "array", "items": {"$ref": "#/definitions/resource"}},
+    "references": {"type": "array", "items": {"$ref": "#/definitions/reference"}},
+    "capabilities": {
+      "type": "object", "additionalProperties": false,
+      "required": ["historyCoordination", "evidence", "requiredAcceptance"],
+      "properties": {
+        "historyCoordination": {"enum": ["unneeded", "unknown", "unsupported", "verified"]},
+        "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "requiredAcceptance": {"enum": ["unverified", "failed", "passed"]}
+      }
+    },
+    "executionReady": {"type": "boolean"},
+    "blockers": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "definitions": {
+    "resource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "materialization", "targetRole", "access", "sharingGroup"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["history", "workspace", "identity-memory", "git-common", "git-worktree", "instructions", "tools", "harness-state", "attachments", "cache", "temp", "external-service", "account-reference"]},
+        "materialization": {"enum": ["snapshot-copy", "symlink", "junction", "cow-overlay", "git-clone", "git-worktree", "native-harness", "service-reference", "rebuild", "omit"]},
+        "targetRole": {"enum": ["recovery-source", "preserved-evidence", "destination-working", "shared-live", "none"]},
+        "access": {"enum": ["read-only", "read-write", "unavailable"]},
+        "sharingGroup": {"type": ["string", "null"]},
+        "sourcePath": {"type": ["string", "null"]},
+        "destinationPath": {"type": ["string", "null"]},
+        "availability": {"enum": ["local-independent", "source-volume-required", "network-required", "unknown"]}
+      }
+    },
+    "reference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["consumer", "basis", "resolution", "status"],
+      "properties": {
+        "consumer": {"type": "string", "minLength": 1},
+        "basis": {"enum": ["absolute", "cwd-relative", "file-relative", "ancestor-search", "repo-relative", "home-relative", "environment-root", "uri"]},
+        "resolution": {"enum": ["preserve-layout", "restore-exact", "alias", "configure", "patch-active", "unresolved"]},
+        "status": {"enum": ["unverified", "failed", "passed", "historical-only", "external"]}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"continuity": {"properties": {"intent": {"const": "fork"}}}}},
+      "then": {"properties": {
+        "identity": {"properties": {"policy": {"enum": ["native-fork-id", "retain-namespaced"]}}},
+        "history": {"properties": {"binding": {"enum": ["snapshot-copy", "native-fork"]}, "writerAuthority": {"const": "destination-exclusive"}}}
+      }}
+    },
+    {
+      "if": {"properties": {"continuity": {"properties": {"intent": {"const": "exclusive-continuation"}}}}},
+      "then": {"properties": {"identity": {"properties": {"policy": {"const": "retain-exclusive"}}}, "history": {"properties": {"writerAuthority": {"const": "destination-exclusive"}}}}}
+    },
+    {
+      "if": {"properties": {"continuity": {"properties": {"intent": {"const": "extended-access"}}}}},
+      "then": {"properties": {"history": {"properties": {"binding": {"enum": ["shared-live-store", "coordinated-service"]}, "writerAuthority": {"enum": ["single-owner-lease", "harness-coordinated"]}}}}}
+    },
+    {
+      "if": {"properties": {"continuity": {"properties": {"intent": {"const": "archive"}}}}},
+      "then": {"properties": {"history": {"properties": {"writerAuthority": {"const": "none"}}}}}
+    },
+    {
+      "if": {"properties": {"executionReady": {"const": true}}},
+      "then": {"properties": {
+        "blockers": {"maxItems": 0},
+        "capabilities": {"properties": {"requiredAcceptance": {"const": "passed"}, "evidence": {"minItems": 1}}},
+        "cwd": {"properties": {"extent": {"enum": ["entire-source-cwd", "selected-closure"]}}},
+        "resources": {"items": {"not": {"properties": {"targetRole": {"enum": ["recovery-source", "preserved-evidence"]}, "access": {"const": "read-write"}}}}},
+        "references": {"items": {"properties": {"status": {"enum": ["passed", "historical-only", "external"]}}}}
+      }}
+    },
+    {
+      "if": {"properties": {"executionReady": {"const": true}, "continuity": {"properties": {"intent": {"const": "exclusive-continuation"}}}}},
+      "then": {"properties": {"continuity": {"properties": {"sourceWriter": {"const": "stopped"}}}}}
+    },
+    {
+      "if": {"properties": {"executionReady": {"const": true}, "continuity": {"properties": {"intent": {"const": "extended-access"}}}}},
+      "then": {"properties": {"capabilities": {"properties": {"historyCoordination": {"const": "verified"}}}}}
+    }
+  ]
+}

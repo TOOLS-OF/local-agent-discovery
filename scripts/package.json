@@ -1,0 +1,9 @@
+{
+  "name": "local-agent-discovery-validation",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write ../AS/sesh-evidence/**/*.cjs ../AS/sesh-bloodhound/bin/*.cjs ../AS/agent-relocator/bin/*.cjs ../AS/sesh-nautilus/bin/*.cjs ../scripts/*.cjs",
+    "format:check": "prettier --check ../AS/sesh-evidence/**/*.cjs ../AS/sesh-bloodhound/bin/*.cjs ../AS/agent-relocator/bin/*.cjs ../AS/sesh-nautilus/bin/*.cjs ../scripts/*.cjs"
+  },
+  "devDependencies": {"prettier":"3.9.10"}
+}
