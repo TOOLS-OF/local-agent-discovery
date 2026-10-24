@@ -23,6 +23,8 @@ Use synthetic fixtures in committed tests. Keep private transcripts, account IDs
 
 ## Review and promotion
 
-Open a PR against the discovered integration branch with the concrete problem, supported behavior, validation and remaining gaps. Arrange independent review and resolve reproduced defects. Record the reviewed head: later changes need appropriate follow-up review. Agent review is distinct from a separate GitHub account's formal approval.
+Use the approved fleet GitHub workflow for publication and integration. A missing fleet verb goes to the owning, officially tracked tooling initiative; contributors must not create bespoke Git/gh wrappers to unblock their own delivery. Local npm registration and an independent safety review do not establish fleet approval. Bind the contributor/team, remote, approved base SHA, explicit PR target and reviewed head before publication or merge; do not infer permission from another team's branch or a shared account.
+
+Open a PR against the approved integration branch with the concrete problem, supported behavior, validation and remaining gaps. Arrange independent review and resolve reproduced defects. Record the reviewed head: later changes need appropriate follow-up review. Agent review is distinct from a separate GitHub account's formal approval.
 
 After integration, stage a revision-identified immutable installation and validate the installed entrypoints and dependencies before switching the machine default. Serialize promotion, retain the prior working installation, and update the machine-local registry. Branches, PRs, review, merge, package installation, PATH availability and target-harness acceptance are separate states. This workflow does not create an automatic updater.
