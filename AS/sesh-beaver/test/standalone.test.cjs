@@ -203,3 +203,27 @@ test('cleanup rejects an unrelated existing directory', async (t) => {
   );
   assert.equal(fs.existsSync(r.sourceTape), true);
 });
+test('cleanup requires fresh attributed runtime independence', () => {
+  const { assertQuiescence } = require('../lib/cleanup.cjs');
+  assert.throws(
+    () =>
+      assertQuiescence({ owner: 'test', observedAt: new Date().toISOString() }),
+    /runtime independence/,
+  );
+  assert.doesNotThrow(() =>
+    assertQuiescence({
+      owner: 'test',
+      observedAt: new Date().toISOString(),
+      runtimeIndependent: true,
+      evidence:
+        'Owned RPC processes awaited exit; no external registrations or known consumers',
+    }),
+  );
+});
+test('backup reservation cannot overwrite existing destination', (t) => {
+  const r = fixture(t),
+    { reserveBackup } = require('../lib/cleanup.cjs');
+  const before = fs.readFileSync(r.sourceTape);
+  assert.throws(() => reserveBackup(r.sourceTape), /EEXIST/);
+  assert.deepEqual(fs.readFileSync(r.sourceTape), before);
+});
