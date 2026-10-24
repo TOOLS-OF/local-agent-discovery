@@ -1,0 +1,24 @@
+{
+  "phase": "repair",
+  "disposition": "standalone",
+  "strategy": "native-fork-new-id",
+  "acceptNewIdentity": true,
+  "codex": "/absolute/path/to/codex",
+  "home": "/absolute/destination/codex-home",
+  "cwd": "/absolute/destination/workspace",
+  "createWorkspace": true,
+  "sourceId": "00000000-0000-7000-8000-000000000001",
+  "sourceTape": "/absolute/source/rollout-2026-01-01T00-00-00-00000000-0000-7000-8000-000000000001.jsonl",
+  "sourceSha256": "replace-with-inspect-result",
+  "lastTurnId": "00000000-0000-7000-8000-000000000002",
+  "title": "Independent collaborator",
+  "evidence": "/absolute/new-operation-directory",
+  "quiescence": {
+    "sourceId": "00000000-0000-7000-8000-000000000001",
+    "status": "completed-boundary",
+    "owner": "migration coordinator",
+    "evidence": "Exact completed native turn from registered inspect",
+    "observedAt": "replace-with-fresh-inspect-timestamp",
+    "offlineSource": false
+  }
+}

@@ -21,6 +21,11 @@ jobs:
       - name: Behavioral, schema and installed-package acceptance
         shell: pwsh
         run: ./scripts/validate-transfer-tools.ps1 -OutputRoot (Join-Path $env:RUNNER_TEMP 'sesh-validation')
+      - name: Registered standalone operation checks (Node 24)
+        if: matrix.node == 24
+        run: |
+          npm --prefix AS/sesh-beaver run sesh:beaver:check
+          npm --prefix AS/sesh-beaver run sesh:beaver:test
       - uses: actions/upload-artifact@v4
         if: always()
         with:

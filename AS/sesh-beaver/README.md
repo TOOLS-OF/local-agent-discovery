@@ -1,6 +1,33 @@
 # Sesh beaver
 
-Realize an explicitly selected filesystem habitat across computers and drives. `sesh-beaver` is the chosen name; the current contribution consists of configuration contracts, synthetic profiles, structural checks, and a separately recorded migration pilot. There is no installed command or general transfer executor yet.
+`sesh-beaver` exposes a bounded Codex standalone-session delivery/repair route. It delegates native delivery to Stork rather than editing live session classifications. A general filesystem-graph executor remains proposed. Source code, an isolated packaged installation, a merged release and a canonical command on PATH are separate states.
+
+## Standalone delivery and repair
+
+On Node 24+, use the registered scoped scripts in this package, or the corresponding installed `sesh-beaver <verb> request.json` command:
+
+```sh
+npm run sesh:beaver:check
+npm run sesh:beaver:preflight -- request.json
+npm run sesh:beaver:prepare -- request.json
+npm run sesh:beaver:repair -- request.json
+npm run sesh:beaver:activate -- commissioning.json
+npm run sesh:beaver:verify -- verification.json
+```
+
+`prepare` forks an explicit preserved tape before migration. `repair` forks an already migrated native session through an explicit completed `lastTurnId`. Both require `disposition: "standalone"`, `strategy: "native-fork-new-id"`, `acceptNewIdentity: true`, an exact source ID/path/SHA-256, explicit Codex executable/home/cwd/evidence paths and a recent attributed source-boundary observation. See [request example](examples/standalone.json). The executable must be installed independently; no credentials are copied. The offline adapter refuses unresolved `history_base` dependencies. Native repair preserves paginated lineage and records its required source rather than flattening or rewriting history.
+
+The supported API allocates a **new ID**. Original ID, parent/source category, complete snapshot and digest remain provenance in `operation.sqlite`; no current source category or parent edge is rewritten. The original chat and its assignments remain intact. Optional `createWorkspace: true` creates only a new operating folder with scoped identity guidance, not a product checkout. The boundary observation is not an OS writer lock. Native completed-turn selection and source-path/digest binding protect the snapshot; later source work remains on the original chat.
+
+A fork can have correct interactive source classification and still be absent from lists because its index has no user event/title. In that case the operation records its allocated ID and reports incomplete acceptance. **Never refork to retry.** Run `activate` on that same recorded ID, explicitly accepting one minimal commissioning turn with a model and delegated parent turn. It uses the supported turn API, read-only/no-network sandbox and disabled environments; it does not resume product work. `activate` is a reusable commissioning step, not direct SQLite repair. It refuses to start a second commissioning turn if one is already recorded. A timed-out/failed turn remains an explicit reconciliation task.
+
+Acceptance independently checks default interactive-source listing, requested-name search and historical-preview search. Requested-name failure remains pending; historical search never substitutes for it. The native result `native-verified-desktop-pending` does not claim desktop acceptance. `accept` reconciles an externally observed exact `codex_app.list_threads` result into the current SQLite record; rendered sidebar search remains a separately unverified surface. No pointer, keyboard or window focus is used.
+
+Retries reverify the same native destination. Evidence directories are exclusive to an operation; incomplete/unknown forks are never duplicated automatically. The ledger holds current structured state, not an accumulating agent diary. There is no automatic destructive rollback: choose the untouched original identity. Preserve both native lineage bases and snapshots. Archive/delete APIs can cascade to descendants and are deliberately excluded.
+
+## Package and development checks
+
+`sesh:beaver:test` runs synthetic behavioral checks. `sesh:beaver:package` takes explicit npm/Codex executable paths and a new output directory, packs Beaver and Stork, installs their complete dependency closure, checks both installed entrypoints and exercises native pre/post delivery plus idempotence without model inference. It uses an isolated test home; that home is test evidence, not an agent workspace or a default installation. `sesh:beaver:schema` generates the installed protocol schema. `operations.json` declares ownership, governing issue, inputs/effects and namespace; the dispatcher rejects unknown verbs before execution. This scoped dispatcher is not fleet-wide enforcement.
 
 ## Responsibility
 
@@ -15,7 +42,7 @@ The [transfer-unit contract](../../docs/transfer-model/TRANSFER_UNIT.md) defines
 ## Place in the kingdom
 
 - `sesh-hound` supplies discovery evidence.
-- `sesh-bloodhound` is the planned recorded-file-access and tool-lineage extractor; its open development work is not a delivered executable.
+- `sesh-bloodhound` supplies bounded recorded-file-access evidence; its source/package/release status must be checked separately.
 - `sesh-bee` supplies readable conversation extracts where its adapter applies.
 - `sesh-nautilus` handles boundary reconstruction when needed.
 - `sesh-stork` handles session delivery where the target adapter fits.

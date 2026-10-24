@@ -1,0 +1,28 @@
+{
+  "name": "sesh-beaver",
+  "version": "0.1.0",
+  "description": "Explicit standalone Codex delivery facade with provenance and native visibility acceptance",
+  "bin": {"sesh-beaver": "bin/sesh-beaver.cjs"},
+  "files": ["bin", "lib", "examples", "operations.json", "README.md"],
+  "scripts": {
+    "sesh:beaver:check": "node bin/sesh-beaver.cjs check",
+    "sesh:beaver:test": "node --test test/*.test.cjs",
+    "sesh:beaver:preflight": "node bin/sesh-beaver.cjs preflight",
+    "sesh:beaver:prepare": "node bin/sesh-beaver.cjs prepare",
+    "sesh:beaver:repair": "node bin/sesh-beaver.cjs repair",
+    "sesh:beaver:verify": "node bin/sesh-beaver.cjs verify",
+    "sesh:beaver:schema": "node bin/sesh-beaver.cjs schema",
+    "sesh:beaver:qualify": "node bin/sesh-beaver.cjs qualify",
+    "sesh:beaver:package": "node bin/sesh-beaver.cjs package",
+    "sesh:beaver:status": "node bin/sesh-beaver.cjs status",
+    "sesh:beaver:inspect": "node bin/sesh-beaver.cjs inspect",
+    "sesh:beaver:diagnose": "node bin/sesh-beaver.cjs diagnose",
+    "sesh:beaver:activate": "node bin/sesh-beaver.cjs activate",
+    "sesh:beaver:accept": "node bin/sesh-beaver.cjs accept",
+    "sesh:beaver:format": "node bin/sesh-beaver.cjs format",
+    "sesh:beaver:cleanup": "node bin/sesh-beaver.cjs cleanup"
+  },
+  "dependencies": {"sesh-stork": "1.1.0"},
+  "engines": {"node": ">=24"},
+  "license": "MIT"
+}

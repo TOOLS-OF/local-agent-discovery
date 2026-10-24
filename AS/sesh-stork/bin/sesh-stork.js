@@ -8,7 +8,7 @@
 // decided upstream by tools like sesh-nautilus/sesh-vulture; sesh-stork's
 // only job is "place it correctly, confirm it's alive."
 const path = require('path');
-const { createSessionDelivery } = require('../../../lib/session-delivery.js');
+const { createSessionDelivery } = require('../lib/session-delivery.js');
 
 function parseArgs(argv) {
   const args = { toHarness: 'claude-code', verify: true };

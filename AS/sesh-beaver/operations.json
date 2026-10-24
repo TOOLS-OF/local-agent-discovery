@@ -1,0 +1,27 @@
+{
+  "schema": "sesh-kingdom-operations/v1",
+  "namespace": "sesh:beaver",
+  "owner": "OTTOBOT-00Q; local-agent-discovery migration tooling",
+  "issue": "https://github.com/TOOLS-OF/local-agent-discovery/issues/22",
+  "implementation": "bin/sesh-beaver.cjs; delivery delegated to sesh-stork/lib/codex-standalone.cjs",
+  "dependencies": "Node >=24, sesh-stork 1.1.0, explicit installed Codex executable and native app-server. Only explicitly authorized activate performs model inference; other operations do not.",
+  "operations": {
+    "check": "Validate exact local verb registry and package scripts; no harness access.",
+    "preflight": "Read one explicit bounded source tape/header and hash, validate explicit new-ID standalone disposition and source quiescence assertion; read-only.",
+    "prepare": "Pre-migration native fork from explicit preserved tape into destination home. New native ID; source unchanged. SQLite current-operation ledger and immutable source snapshot under explicit new evidence directory.",
+    "repair": "Post-migration alternative: new native fork of a quiescent current session; no same-ID source conversion. Original chat unchanged. Require explicit new-ID acceptance and fresh external quiescence assertion.",
+    "verify": "Read native thread and exact-title listing with interactive source filter, no model turn. Protocol acceptance only; desktop/sidebar acceptance remains independent.",
+    "schema": "Generate the installed Codex protocol schema into one explicitly new directory; no harness session access.",
+    "qualify": "Synthetic end-to-end pre/post delivery through installed package entrypoints and explicit Codex executable. New isolated test home under exact new output; no model inference, real sessions or credentials. Record current machine results in SQLite.",
+    "package": "Pack beaver and sibling stork, install complete closure in new isolated prefix with scripts disabled, run installed registry and synthetic delivery qualification; no default runtime/PATH promotion.",
+    "status": "Read the single current-operation row in one explicit evidence SQLite file; no history scan or mutation.",
+    "inspect": "Read/hash one exact <=2GiB source tape, native thread metadata and latest completed native turn ID only; no transcript body scan, credentials or model inference.",
+    "diagnose": "Read one exact thread row from explicit home's state_5.sqlite with an allowlist of classification/listing columns; read-only, no transcript or credential fields.",
+    "activate": "One explicitly authorized minimal commissioning turn on an already recorded fork, model required, read-only/no-network sandbox and environments disabled. Retain delegated turn attribution; never rewrite index/tape. Record current result in existing operation ledger, then recheck listing/name search. No original-session work or role reassignment.",
+    "accept": "Reconcile one exact externally observed desktop listing result and bounded instruction-delivery audit into current SQLite operation state; no native session mutation. API listing acceptance is distinct from rendered sidebar/search acceptance.",
+    "format": "Development-only: install locked scripts formatter dependencies with lifecycle scripts disabled and format only the new beaver/stork CJS source/tests in the owned worktree. No runtime/PATH promotion.",
+    "cleanup": "Retire explicit synthetic qualification/test-home trees only after exact ownership/physical path/link checks and consistent SQLite backup with digest. Preserve operation ledgers/snapshots outside test homes; no live/default/source homes accepted."
+  },
+  "enforcement": "Package dispatcher rejects unknown verbs and mismatched registered npm scripts before operation. This is scoped enforcement, not a fleet-wide installed validator.",
+  "limits": "No supported same-ID source conversion established; no direct live SQLite/tape edits; no native archive/delete rollback because those cascade to descendants. Source is preserved for rollback by choosing original identity. New fork may depend on source lineage; never remove its base. Quiescence assertion is external coordination evidence, not an OS writer lock."
+}

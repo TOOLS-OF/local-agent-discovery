@@ -54,6 +54,22 @@ concept, one concrete class per target harness.
   probe comes back, from the real target `cwd`. Existence of the file on
   disk is not proof it works; a successful, on-topic response is.
 
+## Native Codex standalone adapter
+
+`lib/codex-standalone.cjs` is the narrow native delivery adapter composed by
+the registered [Beaver route](../sesh-beaver/README.md). It uses app-server
+fork/resume/turn/list APIs, preserves original provenance and snapshots, and
+records explicit new-ID mappings. It does not convert source types in place.
+An empty inherited user-event index can require an explicitly authorized
+commissioning turn before listing; opening by ID alone is not acceptance.
+Native default listing, requested-name search, desktop API listing and rendered
+sidebar behavior are distinct results. The legacy Claude CLI remains separate;
+it is not used by the Codex route. Both installed entrypoints are checked when
+Beaver's complete package closure is validated.
+
+The delivery library now lives inside this package. The repository-root
+`lib/session-delivery.js` is a compatibility import, not an installation dependency.
+
 ## License
 
 MIT
