@@ -1,0 +1,15 @@
+{
+  "namespace":"sesh:repo:release",
+  "owner":"OTTOBOT-00Q; TOOLS-OF/local-agent-discovery maintainers",
+  "issue":"https://github.com/TOOLS-OF/local-agent-discovery/issues/22",
+  "implementation":"repository-release.cjs",
+  "dependencies":"Node >=20, installed Git and authenticated GitHub CLI; delegates all network/repository actions to those canonical CLIs",
+  "operations":{
+    "check":"Validate scoped registry and npm scripts; no network or repository mutation.",
+    "inspect":"Read account/repository permission, exact remote main SHA and optional PR metadata/checks; no mutation.",
+    "publish":"Push only own clean named branch with exact requested head; create or reuse PR against explicit main/base SHA. No force push, branch switch or merge.",
+    "review":"Post attributed actual independent review evidence as a native PR review on exact reviewed commit; never fabricate account approval.",
+    "merge":"Merge only explicit own-lane PR/head into exact main base after four successful CI jobs and attributed exact-head independent review; uses GitHub's expected-head guard, no admin bypass or branch deletion."
+  },
+  "limits":"Repository-specific release facade, not an automatic updater or generic authority manager. External review evidence remains owner-verified. GitHub provides an atomic head guard but not an expected-base guard; base is checked immediately before mutation and the result must be verified. No installation or global PATH mutation."
+}
