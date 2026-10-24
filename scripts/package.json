@@ -2,11 +2,6 @@
   "name": "local-agent-discovery-validation",
   "private": true,
   "scripts": {
-    "sesh:repo:release:check": "node repository-release.cjs check",
-    "sesh:repo:release:inspect": "node repository-release.cjs inspect",
-    "sesh:repo:release:publish": "node repository-release.cjs publish",
-    "sesh:repo:release:review": "node repository-release.cjs review",
-    "sesh:repo:release:merge": "node repository-release.cjs merge",
     "format": "prettier --write ../AS/sesh-evidence/**/*.cjs ../AS/sesh-bloodhound/bin/*.cjs ../AS/agent-relocator/bin/*.cjs ../AS/sesh-nautilus/bin/*.cjs ../AS/sesh-beaver/**/*.cjs ../AS/sesh-stork/lib/*.cjs ../scripts/*.cjs",
     "format:check": "prettier --check ../AS/sesh-evidence/**/*.cjs ../AS/sesh-bloodhound/bin/*.cjs ../AS/agent-relocator/bin/*.cjs ../AS/sesh-nautilus/bin/*.cjs ../AS/sesh-beaver/**/*.cjs ../AS/sesh-stork/lib/*.cjs ../scripts/*.cjs"
   },
