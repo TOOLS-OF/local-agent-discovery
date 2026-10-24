@@ -21,8 +21,8 @@ function validate(r) {
     r.remote !== 'https://github.com/TOOLS-OF/local-agent-discovery.git' ||
     r.target !== 'main' ||
     !/^ottobot-00q\/[a-z0-9-]+$/.test(r.branch) ||
-    !/^\w{40}$/.test(r.head) ||
-    !/^\w{40}$/.test(r.base)
+    !/^[0-9a-f]{40}$/.test(r.head) ||
+    !/^[0-9a-f]{40}$/.test(r.base)
   )
     throw Error(
       'Explicit approved owner/repo/remote/branch/head/main/base binding required',
@@ -124,7 +124,7 @@ async function main(args) {
       '-c',
       'credential.helper=!gh auth git-credential',
       'push',
-      'origin',
+      r.remote,
       `HEAD:refs/heads/${r.branch}`,
     ]);
     const matches = json([
