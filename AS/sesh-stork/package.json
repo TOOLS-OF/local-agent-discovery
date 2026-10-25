@@ -1,6 +1,6 @@
 {
   "name": "sesh-stork",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Deliver a finished session file into a target harness's storage convention for a chosen folder, and verify it actually boots.",
   "bin": {
     "sesh-stork": "./bin/sesh-stork.js"
