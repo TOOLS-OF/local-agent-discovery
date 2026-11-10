@@ -200,6 +200,26 @@ function scanClaudeCodeRoot(configRoot, configDirLabel) {
         if (m) cwd = m[1].replace(/\\\\/g, '\\');
         const slugM = buf.match(/"slug":"([^"]*)"/);
         if (slugM) title = slugM[1];
+
+        // Claude Code stores a user-visible renamed title beside the session's
+        // transcript attachments, at <session-id>/custom-title.json. Prefer
+        // that tiny index artifact over the generated slug. In long-lived
+        // sessions the first slug may occur well after our deliberately
+        // bounded 8KB metadata read, while custom-title.json remains cheap and
+        // authoritative for the title Claude currently displays.
+        const sessionId = f.replace(/\.jsonl$/, '');
+        const customTitlePath = path.join(dirPath, sessionId, 'custom-title.json');
+        if (fs.existsSync(customTitlePath)) {
+          try {
+            const customTitleRecord = JSON.parse(fs.readFileSync(customTitlePath, 'utf8'));
+            if (typeof customTitleRecord.customTitle === 'string' && customTitleRecord.customTitle.trim()) {
+              title = customTitleRecord.customTitle.trim();
+            }
+          } catch {
+            // A malformed optional title index must not hide a discoverable
+            // session or force an expensive transcript scan.
+          }
+        }
       } catch { continue; }
       if (matches(cwd)) {
         results.push({
