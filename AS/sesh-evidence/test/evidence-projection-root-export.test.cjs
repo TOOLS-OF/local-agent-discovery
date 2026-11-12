@@ -7,15 +7,12 @@ const Module = require('node:module');
 const direct = require('../lib/evidence-projection.cjs');
 const originalLoad = Module._load;
 let acornPropertyReads = 0;
-const testOnlyAcornPlaceholder = new Proxy(
-  Object.freeze({}),
-  {
-    get() {
-      acornPropertyReads++;
-      throw new Error('test-only acorn placeholder was exercised');
-    },
+const testOnlyAcornPlaceholder = new Proxy(Object.freeze({}), {
+  get() {
+    acornPropertyReads++;
+    throw new Error('test-only acorn placeholder was exercised');
   },
-);
+});
 let root;
 try {
   Module._load = function load(request, parent, isMain) {
@@ -32,7 +29,10 @@ async function read(file) {
 }
 
 test('package root exports the direct projection API without exercising acorn', () => {
-  assert.equal(root.validateEvidenceProjection, direct.validateEvidenceProjection);
+  assert.equal(
+    root.validateEvidenceProjection,
+    direct.validateEvidenceProjection,
+  );
   assert.equal(root.resolvePointer, direct.resolvePointer);
   assert.equal(root.leafPointers, direct.leafPointers);
   assert.equal(root.CONFIG_VERSION, direct.CONFIG_VERSION);
@@ -43,7 +43,9 @@ test('root export and direct module produce identical alpha and beta results', a
   for (const name of ['projection-alpha', 'projection-beta']) {
     const baseDir = path.join(__dirname, 'fixtures', name);
     const config = await read(path.join(baseDir, 'config.json'));
-    const rootResult = await root.validateEvidenceProjection(config, { baseDir });
+    const rootResult = await root.validateEvidenceProjection(config, {
+      baseDir,
+    });
     const directResult = await direct.validateEvidenceProjection(config, {
       baseDir,
     });
