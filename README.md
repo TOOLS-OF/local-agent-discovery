@@ -16,6 +16,7 @@ The transfer-preparation tools compose focused responsibilities:
 | [sesh-nautilus](AS/sesh-nautilus/README.md) | History inspection, native Codex candidate projection, legacy boundary reconstruction |
 | [agent-relocator](AS/agent-relocator/README.md) | Evidence selection, bounded folder previews and ambient-policy handoff |
 | [sesh-beaver](AS/sesh-beaver/README.md) | Filesystem realization contract; general executor pending |
+| [fleet-preflight](AS/fleet-preflight/README.md) | Read-only installed path, digest and cached Git-provenance comparison |
 
 The deterministic preparation commands do not import or launch agents. See the
 [workflow guide](docs/transfer-model/PREPARATION_WORKFLOW.md) for supported
