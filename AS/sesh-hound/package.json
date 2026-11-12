@@ -5,6 +5,9 @@
   "bin": {
     "sesh-hound": "./bin/sesh-hound.js"
   },
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "engines": {
     "node": ">=14"
   },
