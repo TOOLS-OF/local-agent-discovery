@@ -33,10 +33,20 @@ npm install -g .          # from inside this folder
 ## Use
 
 ```bash
+sesh-falcon --preflight --config <expected-components.json>
+
 sesh-falcon --session <id-or-path> --cwd <folder> --model <model> \
             (--skip-permissions | --no-skip-permissions) \
             [--harness claude-code|codex] [--dry-run] [--json]
 ```
+
+`--preflight` is a separate offline route. It reads only the configured local
+paths, digests, and optional cached Git provenance, emits one JSON diagnostic,
+and returns before loading the session-launch API or invoking a launch process.
+Git provenance is explicitly `UNKNOWN` rather than spawning Git. It does not
+claim remote freshness. `MATCH` exits 0, other comparison states
+exit 1, and configuration/read errors exit 2. The existing launch route and
+its required arguments are unchanged.
 
 There is deliberately no default for `--model` or the permission-mode
 flags. Omitting them is an error, not a fallback — the three failure modes
