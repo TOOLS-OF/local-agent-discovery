@@ -6,4 +6,5 @@ module.exports = {
   ...require('./lib/history.cjs'),
   ...require('./lib/resources.cjs'),
   ...require('./lib/expansion.cjs'),
+  ...require('./lib/evidence-projection.cjs'),
 };

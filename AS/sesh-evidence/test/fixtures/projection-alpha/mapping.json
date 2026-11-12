@@ -1,0 +1,1 @@
+{"entries":[{"targetPointer":"#/projection/item/identifier","ownership":"evidence-derived","citations":["catalog:#/catalog/0/code"]},{"targetPointer":"#/projection/item/metric","ownership":"evidence-derived","citations":["catalog:#/catalog/0/score"]},{"targetPointer":"#/projection/label","ownership":"diagnostic-owned","constant":"diagnostic-alpha"}]}
