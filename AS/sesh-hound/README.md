@@ -23,6 +23,13 @@ sesh-hound . --config-dir /path/to/other/claude/config  # also scan a CLAUDE_CON
 
 Pointing at a parent folder also finds sessions from every subfolder underneath it.
 
+### `--subagents` uses a substring selector
+
+The argument to `--subagents` is a case-insensitive search substring. It is not
+required to be a complete session ID. The UUIDs printed in the results are
+canonical session identifiers for later resume or contact operations; they are
+outputs, not the required selector syntax.
+
 ### `--harness` — skip the other two scanners entirely
 
 `--harness claude-code|codex|vscode-copilot` only runs that one scanner. Real
